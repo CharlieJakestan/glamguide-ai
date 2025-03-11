@@ -1,14 +1,19 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Camera, CameraOff, ChevronLeft, ChevronRight, Sliders } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Layout from '@/components/Layout';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
 import { initFaceDetection, detectFacialLandmarks, applyVirtualMakeup } from '@/lib/faceDetection';
 import { MakeupLook, MakeupProduct, ProductInstruction, ApplicationStep } from '@/types/makeup';
-import { Slider } from '@/components/ui/slider';
 import { useNavigate } from 'react-router-dom';
+import CameraControls from '@/components/camera/CameraControls';
+import IntensitySettings from '@/components/camera/IntensitySettings';
+import InstructionsPanel from '@/components/camera/InstructionsPanel';
+import VideoDisplay from '@/components/camera/VideoDisplay';
+import LookNavigation from '@/components/camera/LookNavigation';
+import { Json } from '@/integrations/supabase/types';
 
 const CameraPage = () => {
   const { toast } = useToast();
@@ -39,18 +44,39 @@ const CameraPage = () => {
         
         const fetchedProducts = productsResponse.data as MakeupProduct[];
         
-        const fetchedLooks = looksResponse.data.map(look => ({
-          id: look.id,
-          name: look.name,
-          description: look.description,
-          created_at: look.created_at,
-          products: typeof look.products === 'string' 
-            ? JSON.parse(look.products) 
-            : (look.products as ProductInstruction[]),
-          instructions: typeof look.instructions === 'string'
-            ? JSON.parse(look.instructions)
-            : (look.instructions as ApplicationStep[])
-        })) as MakeupLook[];
+        // Process the looks data to ensure correct typing
+        const fetchedLooks = looksResponse.data.map(look => {
+          // Handle products field
+          let parsedProducts: ProductInstruction[] = [];
+          if (typeof look.products === 'string') {
+            parsedProducts = JSON.parse(look.products);
+          } else if (Array.isArray(look.products)) {
+            parsedProducts = look.products.map((p: any) => ({
+              product_id: p.product_id,
+              intensity: p.intensity
+            }));
+          }
+          
+          // Handle instructions field
+          let parsedInstructions: ApplicationStep[] = [];
+          if (typeof look.instructions === 'string') {
+            parsedInstructions = JSON.parse(look.instructions);
+          } else if (Array.isArray(look.instructions)) {
+            parsedInstructions = look.instructions.map((i: any) => ({
+              step: i.step,
+              description: i.description
+            }));
+          }
+          
+          return {
+            id: look.id,
+            name: look.name,
+            description: look.description,
+            created_at: look.created_at,
+            products: parsedProducts,
+            instructions: parsedInstructions
+          } as MakeupLook;
+        });
         
         setProducts(fetchedProducts);
         setLooks(fetchedLooks);
@@ -244,6 +270,8 @@ const CameraPage = () => {
     });
   };
   
+  const toggleSettings = () => setShowSettings(!showSettings);
+  
   return (
     <Layout>
       <div className="max-w-4xl mx-auto">
@@ -252,91 +280,26 @@ const CameraPage = () => {
             Virtual Makeup Try-On
           </h2>
           
-          {currentLook && (
-            <div className="flex items-center justify-between mb-4">
-              <Button
-                variant="outline"
-                onClick={() => navigateLooks('prev')}
-                disabled={looks.length <= 1}
-                className="flex items-center gap-1"
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Previous Look
-              </Button>
-              
-              <h3 className="text-xl font-semibold text-purple-700">
-                {currentLook.name}
-              </h3>
-              
-              <Button
-                variant="outline"
-                onClick={() => navigateLooks('next')}
-                disabled={looks.length <= 1}
-                className="flex items-center gap-1"
-              >
-                Next Look
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
+          <LookNavigation 
+            currentLook={currentLook} 
+            looksCount={looks.length}
+            onNavigate={navigateLooks}
+          />
           
-          <div className="relative aspect-video bg-gray-100 rounded-lg overflow-hidden mb-6">
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              className="w-full h-full object-cover"
-            />
-            
-            <canvas
-              ref={canvasRef}
-              className="absolute inset-0 w-full h-full pointer-events-none"
-            />
-            
-            {!isStreamActive && (
-              <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-                <CameraOff className="w-16 h-16 text-gray-400" />
-              </div>
-            )}
-            
-            {isStreamActive && !faceDetected && (
-              <div className="absolute bottom-4 left-0 right-0 flex justify-center">
-                <div className="bg-yellow-100 text-yellow-800 px-4 py-2 rounded-full text-sm">
-                  No face detected. Please position your face in the frame.
-                </div>
-              </div>
-            )}
-          </div>
+          <VideoDisplay
+            videoRef={videoRef}
+            canvasRef={canvasRef}
+            isStreamActive={isStreamActive}
+            faceDetected={faceDetected}
+          />
           
-          <div className="flex justify-center gap-4 mb-6">
-            {!isStreamActive ? (
-              <Button
-                onClick={startCamera}
-                className="bg-purple-600 hover:bg-purple-700"
-              >
-                <Camera className="mr-2 h-4 w-4" />
-                Start Camera
-              </Button>
-            ) : (
-              <Button
-                onClick={stopCamera}
-                variant="destructive"
-              >
-                <CameraOff className="mr-2 h-4 w-4" />
-                Stop Camera
-              </Button>
-            )}
-            
-            {isStreamActive && (
-              <Button
-                variant="outline"
-                onClick={() => setShowSettings(!showSettings)}
-              >
-                <Sliders className="mr-2 h-4 w-4" />
-                {showSettings ? 'Hide Adjustments' : 'Show Adjustments'}
-              </Button>
-            )}
-          </div>
+          <CameraControls
+            isStreamActive={isStreamActive}
+            showSettings={showSettings}
+            startCamera={startCamera}
+            stopCamera={stopCamera}
+            toggleSettings={toggleSettings}
+          />
           
           {hasPermission === false && (
             <p className="mt-4 text-red-600 text-center">
@@ -345,45 +308,14 @@ const CameraPage = () => {
           )}
           
           {showSettings && currentLook && (
-            <div className="mt-6 space-y-4 p-4 bg-gray-50 rounded-lg">
-              <h3 className="text-lg font-semibold text-purple-700 mb-2">
-                Adjust Product Intensity
-              </h3>
-              
-              {getCurrentLookProducts().map(product => (
-                <div key={product.id} className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium">{product.name}</span>
-                    <span className="text-sm text-gray-500">
-                      {Math.round(product.intensity * 100)}%
-                    </span>
-                  </div>
-                  <Slider
-                    value={[product.intensity]}
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    onValueChange={(value) => handleIntensityChange(product.id, value)}
-                  />
-                </div>
-              ))}
-            </div>
+            <IntensitySettings
+              products={getCurrentLookProducts()}
+              onIntensityChange={handleIntensityChange}
+            />
           )}
           
           {currentLook && currentLook.instructions && (
-            <div className="mt-6 p-4 bg-purple-50 rounded-lg">
-              <h3 className="text-lg font-semibold text-purple-700 mb-2">
-                How to Apply This Look
-              </h3>
-              
-              <ol className="list-decimal list-inside space-y-2">
-                {currentLook.instructions.map((instruction, index) => (
-                  <li key={index} className="text-gray-700">
-                    {instruction.description}
-                  </li>
-                ))}
-              </ol>
-            </div>
+            <InstructionsPanel instructions={currentLook.instructions} />
           )}
           
           <div className="mt-6 flex justify-between">
