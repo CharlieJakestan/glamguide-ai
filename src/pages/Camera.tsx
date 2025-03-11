@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { Camera, CameraOff, ChevronLeft, ChevronRight, Sliders } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -26,7 +25,6 @@ const CameraPage = () => {
   const [faceDetected, setFaceDetected] = useState(false);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   
-  // Fetch makeup looks and products from Supabase
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -39,21 +37,25 @@ const CameraPage = () => {
         if (looksResponse.error) throw looksResponse.error;
         
         const fetchedProducts = productsResponse.data as MakeupProduct[];
-        let fetchedLooks = looksResponse.data as MakeupLook[];
         
-        // Parse JSONB fields
-        fetchedLooks = fetchedLooks.map(look => ({
-          ...look,
-          products: typeof look.products === 'string' ? JSON.parse(look.products) : look.products,
-          instructions: typeof look.instructions === 'string' ? JSON.parse(look.instructions) : look.instructions,
-        }));
+        const fetchedLooks = looksResponse.data.map(look => ({
+          id: look.id,
+          name: look.name,
+          description: look.description,
+          created_at: look.created_at,
+          products: typeof look.products === 'string' 
+            ? JSON.parse(look.products) 
+            : (look.products as ProductInstruction[]),
+          instructions: typeof look.instructions === 'string'
+            ? JSON.parse(look.instructions)
+            : (look.instructions as ApplicationStep[])
+        })) as MakeupLook[];
         
         setProducts(fetchedProducts);
         setLooks(fetchedLooks);
         
         if (fetchedLooks.length > 0) {
           setCurrentLook(fetchedLooks[0]);
-          // Initialize intensity settings
           const initialSettings: Record<string, number> = {};
           fetchedLooks[0].products.forEach(product => {
             initialSettings[product.product_id] = product.intensity;
@@ -76,7 +78,6 @@ const CameraPage = () => {
     fetchData();
   }, [toast]);
   
-  // Load face detection models
   useEffect(() => {
     const loadModels = async () => {
       const loaded = await initFaceDetection();
@@ -93,7 +94,6 @@ const CameraPage = () => {
     loadModels();
   }, [toast]);
   
-  // Function to start the camera
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -105,7 +105,6 @@ const CameraPage = () => {
         setIsStreamActive(true);
         setHasPermission(true);
         
-        // Start face detection loop
         if (modelsLoaded) {
           startFaceDetection();
         }
@@ -121,7 +120,6 @@ const CameraPage = () => {
     }
   };
   
-  // Stop the camera
   const stopCamera = () => {
     if (videoRef.current && videoRef.current.srcObject) {
       const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
@@ -130,7 +128,6 @@ const CameraPage = () => {
       setIsStreamActive(false);
       setFaceDetected(false);
       
-      // Clear canvas
       if (canvasRef.current) {
         const ctx = canvasRef.current.getContext('2d');
         if (ctx) {
@@ -140,14 +137,12 @@ const CameraPage = () => {
     }
   };
   
-  // Start face detection loop
   const startFaceDetection = () => {
     if (!videoRef.current || !canvasRef.current) return;
     
     const video = videoRef.current;
     const canvas = canvasRef.current;
     
-    // Ensure video dimensions match canvas dimensions
     const updateDimensions = () => {
       if (video.videoWidth && video.videoHeight) {
         const videoWidth = video.videoWidth;
@@ -160,7 +155,6 @@ const CameraPage = () => {
     
     video.addEventListener('loadedmetadata', updateDimensions);
     
-    // Face detection loop
     const detectFace = async () => {
       if (!video || !canvas || !isStreamActive) return;
       
@@ -170,9 +164,7 @@ const CameraPage = () => {
         if (detections) {
           setFaceDetected(true);
           
-          // Apply virtual makeup if we have a current look
           if (currentLook) {
-            // Map product IDs to actual products with colors
             const makeupProducts = currentLook.products.map(item => {
               const product = products.find(p => p.id === item.product_id);
               return {
@@ -191,13 +183,11 @@ const CameraPage = () => {
         console.error('Error in face detection loop:', error);
       }
       
-      // Continue detection loop
       if (isStreamActive) {
         requestAnimationFrame(detectFace);
       }
     };
     
-    // Start detection loop
     detectFace();
     
     return () => {
@@ -205,7 +195,6 @@ const CameraPage = () => {
     };
   };
   
-  // Handle intensity slider change
   const handleIntensityChange = (productId: string, value: number[]) => {
     setIntensitySettings(prev => ({
       ...prev,
@@ -213,7 +202,6 @@ const CameraPage = () => {
     }));
   };
   
-  // Navigate between looks
   const navigateLooks = (direction: 'next' | 'prev') => {
     if (!currentLook || looks.length <= 1) return;
     
@@ -228,7 +216,6 @@ const CameraPage = () => {
     
     setCurrentLook(looks[newIndex]);
     
-    // Update intensity settings for the new look
     const newSettings: Record<string, number> = {};
     looks[newIndex].products.forEach(product => {
       newSettings[product.product_id] = product.intensity;
@@ -236,14 +223,12 @@ const CameraPage = () => {
     setIntensitySettings(newSettings);
   };
   
-  // Clean up on component unmount
   useEffect(() => {
     return () => {
       stopCamera();
     };
   }, []);
   
-  // Find actual product names for the current look
   const getCurrentLookProducts = () => {
     if (!currentLook) return [];
     
@@ -266,7 +251,6 @@ const CameraPage = () => {
             Virtual Makeup Try-On
           </h2>
           
-          {/* Look Navigation */}
           {currentLook && (
             <div className="flex items-center justify-between mb-4">
               <Button
@@ -295,7 +279,6 @@ const CameraPage = () => {
             </div>
           )}
           
-          {/* Video and Canvas Container */}
           <div className="relative aspect-video bg-gray-100 rounded-lg overflow-hidden mb-6">
             <video
               ref={videoRef}
@@ -324,7 +307,6 @@ const CameraPage = () => {
             )}
           </div>
           
-          {/* Camera Controls */}
           <div className="flex justify-center gap-4 mb-6">
             {!isStreamActive ? (
               <Button
@@ -355,14 +337,12 @@ const CameraPage = () => {
             )}
           </div>
           
-          {/* Error Messages */}
           {hasPermission === false && (
             <p className="mt-4 text-red-600 text-center">
               Camera access denied. Please check your browser permissions.
             </p>
           )}
           
-          {/* Product Adjustments */}
           {showSettings && currentLook && (
             <div className="mt-6 space-y-4 p-4 bg-gray-50 rounded-lg">
               <h3 className="text-lg font-semibold text-purple-700 mb-2">
@@ -389,7 +369,6 @@ const CameraPage = () => {
             </div>
           )}
           
-          {/* Application Instructions */}
           {currentLook && currentLook.instructions && (
             <div className="mt-6 p-4 bg-purple-50 rounded-lg">
               <h3 className="text-lg font-semibold text-purple-700 mb-2">
@@ -406,7 +385,6 @@ const CameraPage = () => {
             </div>
           )}
           
-          {/* Navigation Button */}
           <div className="mt-6 flex justify-between">
             <Button variant="outline" onClick={() => navigate('/')}>
               <ChevronLeft className="mr-2 h-4 w-4" />
