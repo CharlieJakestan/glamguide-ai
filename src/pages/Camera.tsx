@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { Camera, CameraOff, ChevronLeft, ChevronRight, Sliders } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -5,7 +6,7 @@ import Layout from '@/components/Layout';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
 import { initFaceDetection, detectFacialLandmarks, applyVirtualMakeup } from '@/lib/faceDetection';
-import { MakeupLook, MakeupProduct } from '@/types/makeup';
+import { MakeupLook, MakeupProduct, ProductInstruction, ApplicationStep } from '@/types/makeup';
 import { Slider } from '@/components/ui/slider';
 import { useNavigate } from 'react-router-dom';
 
