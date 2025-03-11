@@ -9,7 +9,92 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      makeup_looks: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          instructions: Json | null
+          name: string
+          products: Json
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          instructions?: Json | null
+          name: string
+          products: Json
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          instructions?: Json | null
+          name?: string
+          products?: Json
+        }
+        Relationships: []
+      }
+      makeup_products: {
+        Row: {
+          category: string
+          color: string | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          category: string
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          category?: string
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      user_looks: {
+        Row: {
+          created_at: string
+          custom_settings: Json | null
+          id: string
+          look_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          custom_settings?: Json | null
+          id?: string
+          look_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          custom_settings?: Json | null
+          id?: string
+          look_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_looks_look_id_fkey"
+            columns: ["look_id"]
+            isOneToOne: false
+            referencedRelation: "makeup_looks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
