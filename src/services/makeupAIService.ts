@@ -244,10 +244,13 @@ export const sendFeedbackToAI = async (
     
     if (existingLook) {
       // Update existing entry
+      const customSettings = existingLook.custom_settings as Record<string, any> || {};
+      const existingFeedback = Array.isArray(customSettings.feedback) ? customSettings.feedback : [];
+      
       const updatedSettings = {
-        ...(existingLook.custom_settings || {}),
+        ...customSettings,
         feedback: [
-          ...((existingLook.custom_settings?.feedback as any[]) || []),
+          ...existingFeedback,
           {
             text: feedback,
             successful,
