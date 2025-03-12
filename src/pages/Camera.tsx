@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -12,7 +13,6 @@ import IntensitySettings from '@/components/camera/IntensitySettings';
 import InstructionsPanel from '@/components/camera/InstructionsPanel';
 import VideoDisplay from '@/components/camera/VideoDisplay';
 import LookNavigation from '@/components/camera/LookNavigation';
-import { Json } from '@/integrations/supabase/types';
 
 const CameraPage = () => {
   const { toast } = useToast();
@@ -29,6 +29,7 @@ const CameraPage = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [faceDetected, setFaceDetected] = useState(false);
   const [modelsLoaded, setModelsLoaded] = useState(false);
+  const [isLoadingModels, setIsLoadingModels] = useState(true);
   
   useEffect(() => {
     const fetchData = async () => {
@@ -103,14 +104,54 @@ const CameraPage = () => {
   
   useEffect(() => {
     const loadModels = async () => {
-      const loaded = await initFaceDetection();
-      setModelsLoaded(loaded);
-      if (!loaded) {
+      setIsLoadingModels(true);
+      try {
+        const loaded = await initFaceDetection();
+        setModelsLoaded(loaded);
+        
+        if (!loaded) {
+          toast({
+            title: 'Warning',
+            description: 'Face detection models could not be loaded. Trying alternate sources...',
+            variant: 'destructive',
+          });
+          
+          // Try once more with a longer timeout
+          setTimeout(async () => {
+            const retryLoaded = await initFaceDetection(5);
+            setModelsLoaded(retryLoaded);
+            
+            if (!retryLoaded) {
+              toast({
+                title: 'Error',
+                description: 'Face detection models failed to load. Try refreshing the page.',
+                variant: 'destructive',
+              });
+            } else {
+              toast({
+                title: 'Success',
+                description: 'Face detection models loaded successfully.',
+                variant: 'default',
+              });
+            }
+          }, 2000);
+        } else {
+          toast({
+            title: 'Ready',
+            description: 'Face detection models loaded successfully.',
+            variant: 'default',
+          });
+        }
+      } catch (error) {
+        console.error('Error in model loading:', error);
         toast({
-          title: 'Warning',
-          description: 'Face detection models could not be loaded',
+          title: 'Error',
+          description: 'An unexpected error occurred while loading face detection models.',
           variant: 'destructive',
         });
+        setModelsLoaded(false);
+      } finally {
+        setIsLoadingModels(false);
       }
     };
     
@@ -128,8 +169,20 @@ const CameraPage = () => {
         setIsStreamActive(true);
         setHasPermission(true);
         
+        // Only start face detection if models are loaded
         if (modelsLoaded) {
+          toast({
+            title: 'Camera Active',
+            description: 'Starting face detection...',
+            variant: 'default',
+          });
           startFaceDetection();
+        } else {
+          toast({
+            title: 'Limited Mode',
+            description: 'Camera is active, but face detection is unavailable.',
+            variant: 'default',
+          });
         }
       }
     } catch (err) {
@@ -137,7 +190,7 @@ const CameraPage = () => {
       setHasPermission(false);
       toast({
         title: 'Error',
-        description: 'Failed to access camera',
+        description: 'Failed to access camera. Please check your permissions and try again.',
         variant: 'destructive',
       });
     }
@@ -161,7 +214,7 @@ const CameraPage = () => {
   };
   
   const startFaceDetection = () => {
-    if (!videoRef.current || !canvasRef.current) return;
+    if (!videoRef.current || !canvasRef.current || !modelsLoaded) return;
     
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -179,7 +232,7 @@ const CameraPage = () => {
     video.addEventListener('loadedmetadata', updateDimensions);
     
     const detectFace = async () => {
-      if (!video || !canvas || !isStreamActive) return;
+      if (!video || !canvas || !isStreamActive || !modelsLoaded) return;
       
       try {
         const detections = await detectFacialLandmarks(video);
@@ -248,8 +301,55 @@ const CameraPage = () => {
   
   const retryFaceDetection = () => {
     setFaceDetected(false);
-    if (videoRef.current && canvasRef.current) {
+    if (videoRef.current && canvasRef.current && modelsLoaded) {
       startFaceDetection();
+      toast({
+        title: 'Retrying',
+        description: 'Attempting to detect face again...',
+        variant: 'default',
+      });
+    }
+  };
+  
+  const reloadModels = async () => {
+    setIsLoadingModels(true);
+    toast({
+      title: 'Loading',
+      description: 'Attempting to reload face detection models...',
+      variant: 'default',
+    });
+    
+    try {
+      const loaded = await initFaceDetection(5);
+      setModelsLoaded(loaded);
+      
+      if (loaded) {
+        toast({
+          title: 'Success',
+          description: 'Face detection models loaded successfully.',
+          variant: 'default',
+        });
+        
+        // If camera is already running, restart face detection
+        if (isStreamActive) {
+          startFaceDetection();
+        }
+      } else {
+        toast({
+          title: 'Error',
+          description: 'Models could not be loaded. Please check your internet connection.',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error reloading models:', error);
+      toast({
+        title: 'Error',
+        description: 'An unexpected error occurred while loading models.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingModels(false);
     }
   };
   
@@ -305,6 +405,8 @@ const CameraPage = () => {
             stopCamera={stopCamera}
             toggleSettings={toggleSettings}
             retryFaceDetection={retryFaceDetection}
+            isLoadingModels={isLoadingModels}
+            reloadModels={reloadModels}
           />
           
           {hasPermission === false && (

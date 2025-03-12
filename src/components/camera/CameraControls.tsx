@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Camera, CameraOff, Sliders, RefreshCw } from 'lucide-react';
+import { Camera, CameraOff, Sliders, RefreshCw, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface CameraControlsProps {
@@ -11,6 +11,8 @@ interface CameraControlsProps {
   stopCamera: () => void;
   toggleSettings: () => void;
   retryFaceDetection?: () => void;
+  isLoadingModels?: boolean;
+  reloadModels?: () => void;
 }
 
 const CameraControls: React.FC<CameraControlsProps> = ({
@@ -21,6 +23,8 @@ const CameraControls: React.FC<CameraControlsProps> = ({
   stopCamera,
   toggleSettings,
   retryFaceDetection,
+  isLoadingModels = false,
+  reloadModels,
 }) => {
   return (
     <div className="flex flex-wrap justify-center gap-4 mb-6">
@@ -28,9 +32,13 @@ const CameraControls: React.FC<CameraControlsProps> = ({
         <Button
           onClick={startCamera}
           className="bg-purple-600 hover:bg-purple-700"
-          disabled={!modelsLoaded}
+          disabled={isLoadingModels || (!modelsLoaded && !reloadModels)}
         >
-          <Camera className="mr-2 h-4 w-4" />
+          {isLoadingModels ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Camera className="mr-2 h-4 w-4" />
+          )}
           Start Camera
         </Button>
       ) : (
@@ -53,7 +61,7 @@ const CameraControls: React.FC<CameraControlsProps> = ({
             {showSettings ? 'Hide Adjustments' : 'Show Adjustments'}
           </Button>
           
-          {retryFaceDetection && (
+          {retryFaceDetection && modelsLoaded && (
             <Button
               variant="outline"
               onClick={retryFaceDetection}
@@ -65,9 +73,31 @@ const CameraControls: React.FC<CameraControlsProps> = ({
         </>
       )}
       
-      {!modelsLoaded && (
+      {!modelsLoaded && reloadModels && (
+        <Button
+          variant="outline"
+          onClick={reloadModels}
+          disabled={isLoadingModels}
+          className="border-yellow-500 text-yellow-700 hover:bg-yellow-50"
+        >
+          {isLoadingModels ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="mr-2 h-4 w-4" />
+          )}
+          Reload Models
+        </Button>
+      )}
+      
+      {isLoadingModels && (
         <div className="w-full mt-2 text-center text-yellow-600 text-sm">
-          Face detection models are still loading. Please wait...
+          Face detection models are loading... Please wait...
+        </div>
+      )}
+      
+      {!modelsLoaded && !isLoadingModels && (
+        <div className="w-full mt-2 text-center text-yellow-600 text-sm">
+          Face detection models failed to load. Try reloading or check your internet connection.
         </div>
       )}
     </div>

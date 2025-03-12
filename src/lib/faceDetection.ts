@@ -1,35 +1,56 @@
 
 import * as faceapi from 'face-api.js';
 
-// Enhanced model loading with retries
+// Updated model loading with CDN fallback
 export const initFaceDetection = async (maxRetries = 3): Promise<boolean> => {
   let retries = 0;
   
-  const loadModels = async () => {
-    try {
-      await Promise.all([
-        faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
-        faceapi.nets.faceLandmark68Net.loadFromUri('/models'),
-        faceapi.nets.faceRecognitionNet.loadFromUri('/models'),
-      ]);
-      console.log('Face detection models loaded successfully');
-      return true;
-    } catch (error) {
-      console.error('Error loading face detection models:', error);
-      return false;
-    }
-  };
+  // Define both local and CDN paths
+  const modelPaths = [
+    '/models',  // Local path
+    'https://justadudewhohacks.github.io/face-api.js/models' // CDN fallback
+  ];
   
-  // First attempt
-  let success = await loadModels();
+  let currentPathIndex = 0;
+  let success = false;
   
-  // Retry logic if needed
-  while (!success && retries < maxRetries) {
-    console.log(`Retrying face detection model loading (${retries + 1}/${maxRetries})...`);
-    // Small delay before retry
-    await new Promise(resolve => setTimeout(resolve, 1000));
+  // Try loading from each path with retries
+  while (!success && currentPathIndex < modelPaths.length) {
+    const currentPath = modelPaths[currentPathIndex];
+    console.log(`Attempting to load models from: ${currentPath}`);
+    
+    const loadModels = async () => {
+      try {
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(currentPath),
+          faceapi.nets.faceLandmark68Net.loadFromUri(currentPath),
+          faceapi.nets.faceRecognitionNet.loadFromUri(currentPath),
+        ]);
+        console.log(`Face detection models loaded successfully from ${currentPath}`);
+        return true;
+      } catch (error) {
+        console.error(`Error loading face detection models from ${currentPath}:`, error);
+        return false;
+      }
+    };
+    
+    // First attempt with current path
     success = await loadModels();
-    retries++;
+    
+    // Retry logic with the same path if needed
+    retries = 0;
+    while (!success && retries < maxRetries) {
+      console.log(`Retrying face detection model loading from ${currentPath} (${retries + 1}/${maxRetries})...`);
+      // Small delay before retry
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      success = await loadModels();
+      retries++;
+    }
+    
+    // If still not successful, try next path
+    if (!success) {
+      currentPathIndex++;
+    }
   }
   
   // Verify the models are actually loaded
