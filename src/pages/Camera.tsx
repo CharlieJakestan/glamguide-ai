@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -44,9 +43,7 @@ const CameraPage = () => {
         
         const fetchedProducts = productsResponse.data as MakeupProduct[];
         
-        // Process the looks data to ensure correct typing
         const fetchedLooks = looksResponse.data.map(look => {
-          // Handle products field
           let parsedProducts: ProductInstruction[] = [];
           if (typeof look.products === 'string') {
             parsedProducts = JSON.parse(look.products);
@@ -57,7 +54,6 @@ const CameraPage = () => {
             }));
           }
           
-          // Handle instructions field
           let parsedInstructions: ApplicationStep[] = [];
           if (typeof look.instructions === 'string') {
             parsedInstructions = JSON.parse(look.instructions);
@@ -250,6 +246,13 @@ const CameraPage = () => {
     setIntensitySettings(newSettings);
   };
   
+  const retryFaceDetection = () => {
+    setFaceDetected(false);
+    if (videoRef.current && canvasRef.current) {
+      startFaceDetection();
+    }
+  };
+  
   useEffect(() => {
     return () => {
       stopCamera();
@@ -291,14 +294,17 @@ const CameraPage = () => {
             canvasRef={canvasRef}
             isStreamActive={isStreamActive}
             faceDetected={faceDetected}
+            retryFaceDetection={retryFaceDetection}
           />
           
           <CameraControls
             isStreamActive={isStreamActive}
             showSettings={showSettings}
+            modelsLoaded={modelsLoaded}
             startCamera={startCamera}
             stopCamera={stopCamera}
             toggleSettings={toggleSettings}
+            retryFaceDetection={retryFaceDetection}
           />
           
           {hasPermission === false && (
