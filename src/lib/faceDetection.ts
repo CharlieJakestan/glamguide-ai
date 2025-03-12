@@ -1,33 +1,82 @@
 
 import * as faceapi from 'face-api.js';
 
-// Initialize face detection
-export const initFaceDetection = async () => {
-  try {
-    await Promise.all([
-      faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
-      faceapi.nets.faceLandmark68Net.loadFromUri('/models'),
-      faceapi.nets.faceRecognitionNet.loadFromUri('/models'),
-    ]);
-    console.log('Face detection models loaded successfully');
-    return true;
-  } catch (error) {
-    console.error('Error loading face detection models:', error);
-    return false;
+// Enhanced model loading with retries
+export const initFaceDetection = async (maxRetries = 3): Promise<boolean> => {
+  let retries = 0;
+  
+  const loadModels = async () => {
+    try {
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
+        faceapi.nets.faceLandmark68Net.loadFromUri('/models'),
+        faceapi.nets.faceRecognitionNet.loadFromUri('/models'),
+      ]);
+      console.log('Face detection models loaded successfully');
+      return true;
+    } catch (error) {
+      console.error('Error loading face detection models:', error);
+      return false;
+    }
+  };
+  
+  // First attempt
+  let success = await loadModels();
+  
+  // Retry logic if needed
+  while (!success && retries < maxRetries) {
+    console.log(`Retrying face detection model loading (${retries + 1}/${maxRetries})...`);
+    // Small delay before retry
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    success = await loadModels();
+    retries++;
   }
+  
+  // Verify the models are actually loaded
+  const modelsLoaded = 
+    faceapi.nets.tinyFaceDetector.isLoaded && 
+    faceapi.nets.faceLandmark68Net.isLoaded && 
+    faceapi.nets.faceRecognitionNet.isLoaded;
+    
+  console.log('Face detection models loaded status:', modelsLoaded);
+  return modelsLoaded;
 };
 
-// Detect facial landmarks
+// Enhanced face detection with improved parameters for reliability
 export const detectFacialLandmarks = async (video: HTMLVideoElement) => {
   if (!video) return null;
   
   try {
-    const detections = await faceapi.detectSingleFace(
-      video, 
-      new faceapi.TinyFaceDetectorOptions()
-    ).withFaceLandmarks();
+    // Using more forgiving detection parameters
+    const options = new faceapi.TinyFaceDetectorOptions({
+      inputSize: 320,  // Lower for better performance
+      scoreThreshold: 0.3  // Lower threshold for better detection in challenging conditions
+    });
     
-    return detections;
+    const detections = await faceapi
+      .detectSingleFace(video, options)
+      .withFaceLandmarks();
+    
+    if (detections) {
+      console.log('Face detected successfully');
+      return detections;
+    } else {
+      // Try again with even more lenient parameters if initial detection fails
+      const fallbackOptions = new faceapi.TinyFaceDetectorOptions({
+        inputSize: 256,
+        scoreThreshold: 0.2
+      });
+      
+      const fallbackDetections = await faceapi
+        .detectSingleFace(video, fallbackOptions)
+        .withFaceLandmarks();
+        
+      if (fallbackDetections) {
+        console.log('Face detected with fallback parameters');
+      }
+      
+      return fallbackDetections;
+    }
   } catch (error) {
     console.error('Error detecting facial landmarks:', error);
     return null;
