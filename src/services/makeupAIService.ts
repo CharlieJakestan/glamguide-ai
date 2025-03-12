@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase';
 
 // Define makeup style characteristics by region
@@ -228,14 +227,60 @@ export const sendFeedbackToAI = async (
   successful: boolean
 ) => {
   try {
-    const { error } = await supabase.from('ai_feedback').insert({
-      look_id: lookId,
-      feedback,
-      successful,
-      created_at: new Date().toISOString()
-    });
+    const userId = (await supabase.auth.getUser()).data.user?.id;
     
-    if (error) throw error;
+    if (!userId) {
+      console.error('User not authenticated');
+      return false;
+    }
+    
+    // Check if a user_look entry exists for this look
+    const { data: existingLook } = await supabase
+      .from('user_looks')
+      .select('id, custom_settings')
+      .eq('user_id', userId)
+      .eq('look_id', lookId)
+      .maybeSingle();
+    
+    if (existingLook) {
+      // Update existing entry
+      const updatedSettings = {
+        ...(existingLook.custom_settings || {}),
+        feedback: [
+          ...((existingLook.custom_settings?.feedback as any[]) || []),
+          {
+            text: feedback,
+            successful,
+            timestamp: new Date().toISOString()
+          }
+        ]
+      };
+      
+      const { error } = await supabase
+        .from('user_looks')
+        .update({ custom_settings: updatedSettings })
+        .eq('id', existingLook.id);
+      
+      if (error) throw error;
+    } else {
+      // Create new entry
+      const { error } = await supabase
+        .from('user_looks')
+        .insert({
+          user_id: userId,
+          look_id: lookId,
+          custom_settings: {
+            feedback: [{
+              text: feedback,
+              successful,
+              timestamp: new Date().toISOString()
+            }]
+          }
+        });
+      
+      if (error) throw error;
+    }
+    
     return true;
   } catch (err) {
     console.error('Error sending feedback to AI:', err);
