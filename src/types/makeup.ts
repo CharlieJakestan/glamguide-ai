@@ -25,6 +25,7 @@ export interface MakeupLook {
   products: ProductInstruction[];
   instructions: ApplicationStep[];
   created_at: string;
+  region?: 'usa' | 'korean' | 'indian' | 'european'; // Added region property
 }
 
 export interface UserLook {
@@ -33,4 +34,15 @@ export interface UserLook {
   look_id: string | null;
   custom_settings: Record<string, any>;
   created_at: string;
+}
+
+export interface AIGuidanceSettings {
+  enabled: boolean;
+  voiceEnabled: boolean;
+  selectedRegion: 'usa' | 'korean' | 'indian' | 'european';
+}
+
+export interface ProductSubstitution {
+  originalProduct: string;
+  substitutes: string[];
 }

@@ -1,6 +1,5 @@
-
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Mic, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Layout from '@/components/Layout';
 import { useToast } from '@/hooks/use-toast';
@@ -13,6 +12,9 @@ import IntensitySettings from '@/components/camera/IntensitySettings';
 import InstructionsPanel from '@/components/camera/InstructionsPanel';
 import VideoDisplay from '@/components/camera/VideoDisplay';
 import LookNavigation from '@/components/camera/LookNavigation';
+import AIGuidancePanel from '@/components/camera/AIGuidancePanel';
+import APIKeyDialog from '@/components/camera/APIKeyDialog';
+import { useMakeupGuidance } from '@/hooks/useMakeupGuidance';
 
 const CameraPage = () => {
   const { toast } = useToast();
@@ -30,6 +32,9 @@ const CameraPage = () => {
   const [faceDetected, setFaceDetected] = useState(false);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [isLoadingModels, setIsLoadingModels] = useState(true);
+  
+  const [showAIGuidance, setShowAIGuidance] = useState(false);
+  const [showAPIKeyDialog, setShowAPIKeyDialog] = useState(false);
   
   useEffect(() => {
     const fetchData = async () => {
@@ -158,6 +163,24 @@ const CameraPage = () => {
     loadModels();
   }, [toast]);
   
+  const {
+    currentGuidance,
+    isAnalyzing,
+    substitutions,
+    voiceEnabled,
+    toggleVoiceGuidance,
+    resetAnalysis,
+    region,
+    setRegion
+  } = useMakeupGuidance({
+    isActive: isStreamActive && showAIGuidance && faceDetected,
+    currentLook,
+    availableProducts: products,
+    canvasRef,
+    videoRef,
+    faceDetected
+  });
+  
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -212,6 +235,12 @@ const CameraPage = () => {
       }
     }
   };
+  
+  useEffect(() => {
+    if (resetAnalysis) {
+      resetAnalysis();
+    }
+  }, [currentLook, resetAnalysis]);
   
   const startFaceDetection = () => {
     if (!videoRef.current || !canvasRef.current || !modelsLoaded) return;
@@ -375,12 +404,26 @@ const CameraPage = () => {
   
   const toggleSettings = () => setShowSettings(!showSettings);
   
+  const toggleAIGuidance = () => {
+    setShowAIGuidance(prev => !prev);
+    
+    if (!showAIGuidance) {
+      // Show the API key dialog if AI guidance is being turned on
+      setShowAPIKeyDialog(true);
+    }
+  };
+  
   return (
     <Layout>
       <div className="max-w-4xl mx-auto">
         <div className="bg-white p-6 rounded-xl shadow-lg">
           <h2 className="text-2xl font-bold text-purple-800 mb-6">
             Virtual Makeup Try-On
+            {showAIGuidance && (
+              <span className="ml-2 text-sm bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
+                AI-Guided
+              </span>
+            )}
           </h2>
           
           <LookNavigation 
@@ -395,6 +438,7 @@ const CameraPage = () => {
             isStreamActive={isStreamActive}
             faceDetected={faceDetected}
             retryFaceDetection={retryFaceDetection}
+            guidanceHighlight={showAIGuidance && currentGuidance?.visualGuide}
           />
           
           <CameraControls
@@ -409,6 +453,30 @@ const CameraPage = () => {
             reloadModels={reloadModels}
           />
           
+          {isStreamActive && modelsLoaded && (
+            <div className="mt-4 flex justify-center">
+              <Button
+                variant={showAIGuidance ? "default" : "outline"}
+                onClick={toggleAIGuidance}
+                className={showAIGuidance ? "bg-purple-600 hover:bg-purple-700" : ""}
+              >
+                <Mic className="mr-2 h-4 w-4" />
+                {showAIGuidance ? "Disable AI Guidance" : "Enable AI Guidance"}
+              </Button>
+              
+              {showAIGuidance && (
+                <Button
+                  variant="outline"
+                  className="ml-2"
+                  onClick={() => setShowAPIKeyDialog(true)}
+                >
+                  <Settings className="mr-2 h-4 w-4" />
+                  Voice Settings
+                </Button>
+              )}
+            </div>
+          )}
+          
           {hasPermission === false && (
             <p className="mt-4 text-red-600 text-center">
               Camera access denied. Please check your browser permissions.
@@ -422,7 +490,19 @@ const CameraPage = () => {
             />
           )}
           
-          {currentLook && currentLook.instructions && (
+          {showAIGuidance && isStreamActive && (
+            <AIGuidancePanel
+              guidance={currentGuidance}
+              isAnalyzing={isAnalyzing}
+              voiceEnabled={voiceEnabled}
+              toggleVoiceGuidance={toggleVoiceGuidance}
+              substitutions={substitutions}
+              region={region}
+              setRegion={setRegion}
+            />
+          )}
+          
+          {currentLook && currentLook.instructions && !showAIGuidance && (
             <InstructionsPanel instructions={currentLook.instructions} />
           )}
           
@@ -439,6 +519,11 @@ const CameraPage = () => {
           </div>
         </div>
       </div>
+      
+      <APIKeyDialog 
+        open={showAPIKeyDialog} 
+        onOpenChange={setShowAPIKeyDialog} 
+      />
     </Layout>
   );
 };

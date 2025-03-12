@@ -9,6 +9,11 @@ interface VideoDisplayProps {
   isStreamActive: boolean;
   faceDetected: boolean;
   retryFaceDetection?: () => void;
+  guidanceHighlight?: {
+    x: number;
+    y: number;
+    radius: number;
+  }
 }
 
 const VideoDisplay: React.FC<VideoDisplayProps> = ({
@@ -17,8 +22,108 @@ const VideoDisplay: React.FC<VideoDisplayProps> = ({
   isStreamActive,
   faceDetected,
   retryFaceDetection,
+  guidanceHighlight
 }) => {
   const [detectionAttempts, setDetectionAttempts] = useState(0);
+  const [highlightCanvas, setHighlightCanvas] = useState<HTMLCanvasElement | null>(null);
+  
+  // Create highlight canvas
+  useEffect(() => {
+    if (!highlightCanvas) {
+      const canvas = document.createElement('canvas');
+      canvas.className = 'absolute inset-0 w-full h-full pointer-events-none';
+      setHighlightCanvas(canvas);
+    }
+  }, [highlightCanvas]);
+  
+  // Append highlight canvas to DOM
+  useEffect(() => {
+    if (highlightCanvas && videoRef.current && videoRef.current.parentElement) {
+      videoRef.current.parentElement.appendChild(highlightCanvas);
+      
+      return () => {
+        if (highlightCanvas.parentElement) {
+          highlightCanvas.parentElement.removeChild(highlightCanvas);
+        }
+      };
+    }
+  }, [highlightCanvas, videoRef]);
+  
+  // Draw guidance highlight
+  useEffect(() => {
+    if (!highlightCanvas || !guidanceHighlight || !isStreamActive || !videoRef.current) return;
+    
+    // Match canvas dimensions to video
+    highlightCanvas.width = videoRef.current.videoWidth || 640;
+    highlightCanvas.height = videoRef.current.videoHeight || 480;
+    
+    const ctx = highlightCanvas.getContext('2d');
+    if (!ctx) return;
+    
+    // Clear previous highlights
+    ctx.clearRect(0, 0, highlightCanvas.width, highlightCanvas.height);
+    
+    // Calculate position based on percentages
+    const x = (guidanceHighlight.x / 100) * highlightCanvas.width;
+    const y = (guidanceHighlight.y / 100) * highlightCanvas.height;
+    const radius = guidanceHighlight.radius;
+    
+    // Draw highlight circle
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, 2 * Math.PI);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    
+    // Draw pulsing effect
+    ctx.beginPath();
+    ctx.arc(x, y, radius + 5, 0, 2 * Math.PI);
+    ctx.strokeStyle = 'rgba(155, 135, 245, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    // Add pulse animation
+    let pulseSize = 0;
+    let growing = true;
+    
+    const animatePulse = () => {
+      if (!ctx || !isStreamActive) return;
+      
+      ctx.clearRect(0, 0, highlightCanvas.width, highlightCanvas.height);
+      
+      // Inner highlight
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, 2 * Math.PI);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      
+      // Pulsing outer circle
+      ctx.beginPath();
+      ctx.arc(x, y, radius + pulseSize, 0, 2 * Math.PI);
+      ctx.strokeStyle = 'rgba(155, 135, 245, ' + (0.5 - pulseSize/20) + ')';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      
+      // Update pulse size
+      if (growing) {
+        pulseSize += 0.5;
+        if (pulseSize >= 10) growing = false;
+      } else {
+        pulseSize -= 0.5;
+        if (pulseSize <= 0) growing = true;
+      }
+      
+      requestAnimationFrame(animatePulse);
+    };
+    
+    const animationId = requestAnimationFrame(animatePulse);
+    
+    return () => {
+      cancelAnimationFrame(animationId);
+      if (ctx) ctx.clearRect(0, 0, highlightCanvas.width, highlightCanvas.height);
+    };
+  }, [highlightCanvas, guidanceHighlight, isStreamActive, videoRef]);
   
   // Reset detection attempts when stream changes
   useEffect(() => {
