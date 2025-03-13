@@ -499,6 +499,7 @@ const CameraPage = () => {
               substitutions={substitutions}
               region={region}
               setRegion={setRegion}
+              setVoiceEnabled={setVoiceEnabled}
             />
           )}
           

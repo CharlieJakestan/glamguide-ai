@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -6,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
-import { Google } from 'lucide-react';
+import { Mail } from 'lucide-react';
 import Layout from '@/components/Layout';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
@@ -18,7 +17,6 @@ const Auth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Check if user is already logged in
   useEffect(() => {
     const checkSession = async () => {
       const { data } = await supabase.auth.getSession();
@@ -29,7 +27,6 @@ const Auth = () => {
     
     checkSession();
     
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (session) {
@@ -70,7 +67,6 @@ const Auth = () => {
         variant: "default",
       });
       
-      // Reset fields and switch to sign in tab
       setEmail('');
       setPassword('');
       document.getElementById('sign-in-tab')?.click();
@@ -107,7 +103,11 @@ const Auth = () => {
       
       if (error) throw error;
       
-      // Redirect happens via the auth state listener
+      toast({
+        title: "Signed in",
+        description: "Welcome back!",
+        variant: "default",
+      });
       
     } catch (error: any) {
       toast({
@@ -234,7 +234,7 @@ const Auth = () => {
                 onClick={handleGoogleSignIn}
                 disabled={loading}
               >
-                <Google className="mr-2 h-4 w-4" />
+                <Mail className="mr-2 h-4 w-4" />
                 Google
               </Button>
             </Tabs>
