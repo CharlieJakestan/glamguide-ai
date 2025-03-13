@@ -8,7 +8,7 @@ import {
   FaceAnalysisResult,
   MakeupGuidance
 } from '@/services/makeupAIService';
-import { speakInstruction } from '@/services/speechService';
+import { speakInstruction, getApiKey } from '@/services/speechService';
 
 interface UseMakeupGuidanceProps {
   isActive: boolean;
@@ -32,7 +32,7 @@ export const useMakeupGuidance = ({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisStep, setAnalysisStep] = useState(0);
   const [substitutions, setSubstitutions] = useState<Record<string, string[]>>({});
-  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(!!getApiKey());
   const [region, setRegion] = useState<'usa' | 'korean' | 'indian' | 'european'>('usa');
   
   const analysisPaused = useRef(false);
@@ -169,6 +169,7 @@ export const useMakeupGuidance = ({
     toggleVoiceGuidance,
     resetAnalysis,
     region,
-    setRegion
+    setRegion,
+    setVoiceEnabled
   };
 };

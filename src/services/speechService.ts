@@ -1,14 +1,22 @@
-
 const ELEVEN_LABS_API_URL = 'https://api.elevenlabs.io/v1/text-to-speech';
 const DEFAULT_VOICE_ID = 'EXAVITQu4vr4xnSDxMaL'; // Sarah voice
+const API_KEY_STORAGE_KEY = 'elevenlabs_api_key';
 
-let apiKey: string | null = null;
+// Initialize from localStorage or null
+let apiKey: string | null = localStorage.getItem(API_KEY_STORAGE_KEY);
 
 export const setApiKey = (key: string) => {
   apiKey = key;
+  localStorage.setItem(API_KEY_STORAGE_KEY, key);
 };
 
-export const getApiKey = () => apiKey;
+export const getApiKey = () => {
+  // If not in memory, check localStorage
+  if (!apiKey) {
+    apiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
+  }
+  return apiKey;
+};
 
 export const synthesizeSpeech = async (
   text: string, 

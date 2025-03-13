@@ -1,8 +1,9 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Volume2, VolumeX, AlertCircle, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MakeupGuidance } from '@/services/makeupAIService';
+import { getApiKey } from '@/services/speechService';
 
 interface AIGuidancePanelProps {
   guidance: MakeupGuidance | null;
@@ -12,6 +13,7 @@ interface AIGuidancePanelProps {
   substitutions: Record<string, string[]>;
   region: 'usa' | 'korean' | 'indian' | 'european';
   setRegion: (region: 'usa' | 'korean' | 'indian' | 'european') => void;
+  setVoiceEnabled: (enabled: boolean) => void;
 }
 
 const AIGuidancePanel: React.FC<AIGuidancePanelProps> = ({
@@ -21,8 +23,17 @@ const AIGuidancePanel: React.FC<AIGuidancePanelProps> = ({
   toggleVoiceGuidance,
   substitutions,
   region,
-  setRegion
+  setRegion,
+  setVoiceEnabled
 }) => {
+  // Auto-enable voice guidance if API key is available
+  useEffect(() => {
+    const apiKey = getApiKey();
+    if (apiKey && !voiceEnabled) {
+      setVoiceEnabled(true);
+    }
+  }, [voiceEnabled, setVoiceEnabled]);
+
   return (
     <div className="mt-6 space-y-4 p-4 bg-purple-50 rounded-lg">
       <div className="flex justify-between items-center">

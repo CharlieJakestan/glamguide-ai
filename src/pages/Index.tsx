@@ -1,9 +1,10 @@
 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, Sparkles, UserCheck, ChevronRight } from 'lucide-react';
+import { Camera, Sparkles, UserCheck, ChevronRight, Info, BookOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Layout from '@/components/Layout';
+import { Link } from 'react-router-dom';
 
 const Index = () => {
   const navigate = useNavigate();
@@ -65,11 +66,64 @@ const Index = () => {
 
         <Button
           onClick={() => navigate('/camera')}
-          className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-6 text-xl rounded-full transition-transform hover:transform hover:scale-105"
+          className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-6 text-xl rounded-full transition-transform hover:transform hover:scale-105 mb-16"
         >
           Start Your Makeover
           <ChevronRight className="ml-2 h-6 w-6" />
         </Button>
+        
+        {/* About Section */}
+        <div className="w-full max-w-4xl mx-auto mb-16" id="about">
+          <div className="flex items-center mb-6">
+            <Info className="h-8 w-8 text-purple-600 mr-3" />
+            <h2 className="text-3xl font-bold text-purple-800">About GlamGuide AI</h2>
+          </div>
+          <div className="bg-white rounded-xl shadow-md p-8">
+            <p className="text-gray-700 mb-4">
+              GlamGuide AI is a revolutionary makeup assistant that combines computer vision with artificial intelligence to provide personalized makeup guidance in real-time.
+            </p>
+            <p className="text-gray-700 mb-4">
+              Unlike traditional tutorials, our AI analyzes your unique facial features and makeup application as you apply it, offering instant feedback and adjustments to help you achieve your desired look.
+            </p>
+            <p className="text-gray-700">
+              With cultural makeup styles from around the world and product substitution suggestions, GlamGuide AI ensures you can create beautiful looks with the products you already have.
+            </p>
+          </div>
+        </div>
+        
+        {/* How It Works Section */}
+        <div className="w-full max-w-4xl mx-auto mb-16" id="how-it-works">
+          <div className="flex items-center mb-6">
+            <BookOpen className="h-8 w-8 text-purple-600 mr-3" />
+            <h2 className="text-3xl font-bold text-purple-800">How This Works</h2>
+          </div>
+          <div className="bg-white rounded-xl shadow-md p-8">
+            <ol className="list-decimal list-inside space-y-4 text-left">
+              <li className="text-gray-700">
+                <span className="font-semibold">Select a Look:</span> Browse our collection of makeup styles from different cultures around the world.
+              </li>
+              <li className="text-gray-700">
+                <span className="font-semibold">Position Your Camera:</span> Our AI needs to see your face clearly to provide accurate guidance.
+              </li>
+              <li className="text-gray-700">
+                <span className="font-semibold">Follow Voice Guidance:</span> Listen to our AI's personalized instructions that adapt in real-time as you apply your makeup.
+              </li>
+              <li className="text-gray-700">
+                <span className="font-semibold">Get Live Feedback:</span> The AI will analyze your application technique and provide instant adjustments.
+              </li>
+              <li className="text-gray-700">
+                <span className="font-semibold">Product Substitutions:</span> Don't have a specific product? Our AI will suggest alternatives from your collection.
+              </li>
+            </ol>
+            <div className="mt-6 text-center">
+              <Link to="/auth">
+                <Button className="bg-purple-600 hover:bg-purple-700 text-white">
+                  Sign In to Get Started
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
       </div>
     </Layout>
   );

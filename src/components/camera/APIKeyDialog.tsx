@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Dialog,
   DialogContent,
@@ -22,6 +22,22 @@ interface APIKeyDialogProps {
 const APIKeyDialog: React.FC<APIKeyDialogProps> = ({ open, onOpenChange }) => {
   const [apiKey, setStateApiKey] = useState<string>(getApiKey() || '');
   const { toast } = useToast();
+  
+  // Initialize with the ElevenLabs API key if not already set
+  useEffect(() => {
+    const savedKey = getApiKey();
+    if (!savedKey) {
+      const defaultKey = 'sk_0dfcb07ba1e4d72443fcb5385899c03e9106d3d27ddaadc2';
+      setApiKey(defaultKey);
+      setStateApiKey(defaultKey);
+      
+      toast({
+        title: "API Key Auto-configured",
+        description: "Voice guidance has been automatically enabled with your ElevenLabs API key.",
+        variant: "default",
+      });
+    }
+  }, [toast]);
   
   const handleSave = () => {
     if (!apiKey.trim()) {
