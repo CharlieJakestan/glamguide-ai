@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import Camera from "./pages/Camera";
 import Looks from "./pages/Looks";
 import Auth from "./pages/Auth";
+import GanGenerator from "./pages/GanGenerator";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -23,6 +24,7 @@ const App = () => (
           <Route path="/camera" element={<Camera />} />
           <Route path="/looks" element={<Looks />} />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/gan-generator" element={<GanGenerator />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
