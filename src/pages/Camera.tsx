@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Mic, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -171,7 +172,8 @@ const CameraPage = () => {
     toggleVoiceGuidance,
     resetAnalysis,
     region,
-    setRegion
+    setRegion,
+    setVoiceEnabled
   } = useMakeupGuidance({
     isActive: isStreamActive && showAIGuidance && faceDetected,
     currentLook,
