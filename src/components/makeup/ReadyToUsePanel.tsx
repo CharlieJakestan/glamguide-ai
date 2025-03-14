@@ -4,19 +4,22 @@ import { Check, Volume2, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
 
 interface ReadyToUsePanelProps {
   cameraActive: boolean;
   voiceEnabled: boolean;
   onToggleCamera: () => void;
   onVoiceEnabledChange: (enabled: boolean) => void;
+  analysisProgress?: number;
 }
 
 const ReadyToUsePanel: React.FC<ReadyToUsePanelProps> = ({
   cameraActive,
   voiceEnabled,
   onToggleCamera,
-  onVoiceEnabledChange
+  onVoiceEnabledChange,
+  analysisProgress = 0
 }) => {
   return (
     <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
@@ -37,6 +40,16 @@ const ReadyToUsePanel: React.FC<ReadyToUsePanelProps> = ({
             onCheckedChange={onVoiceEnabledChange}
           />
         </div>
+        
+        {analysisProgress > 0 && (
+          <div className="w-full">
+            <div className="flex justify-between text-sm text-gray-600 mb-1">
+              <span>Analysis Progress</span>
+              <span>{Math.round(analysisProgress)}%</span>
+            </div>
+            <Progress value={analysisProgress} className="h-2" />
+          </div>
+        )}
         
         <Button
           onClick={onToggleCamera}

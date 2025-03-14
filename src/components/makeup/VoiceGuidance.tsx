@@ -4,7 +4,8 @@ import { Volume2, VolumeX } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { getApiKey, setApiKey } from '@/services/speechService';
+import { Progress } from '@/components/ui/progress';
+import { getApiKey } from '@/services/speechService';
 import { useToast } from '@/hooks/use-toast';
 
 interface VoiceGuidanceProps {
@@ -12,30 +13,32 @@ interface VoiceGuidanceProps {
   onEnabledChange: (enabled: boolean) => void;
   currentInstruction?: string;
   progress?: number; // 0-100
+  onGenerateMockData?: () => void;
 }
 
 const VoiceGuidance: React.FC<VoiceGuidanceProps> = ({
   enabled,
   onEnabledChange,
   currentInstruction,
-  progress = 0
+  progress = 0,
+  onGenerateMockData
 }) => {
   const { toast } = useToast();
-  const [apiKey, setStateApiKey] = useState(getApiKey() || "");
   
-  // Set up default API key if not already set
+  // Ensure API key is set properly
   useEffect(() => {
-    if (!apiKey) {
-      const defaultKey = "sk_0dfcb07ba1e4d72443fcb5385899c03e9106d3d27ddaadc2";
-      setApiKey(defaultKey);
-      setStateApiKey(defaultKey);
+    const apiKey = getApiKey();
+    
+    if (apiKey && !enabled) {
+      // If we have an API key but voice is disabled, enable it
+      onEnabledChange(true);
       
       toast({
-        title: "Voice Guidance Enabled",
-        description: "Using default API key for ElevenLabs voice synthesis.",
+        title: "Voice Guidance Activated",
+        description: "Voice guidance is now ready to use.",
       });
     }
-  }, [apiKey, toast]);
+  }, [enabled, onEnabledChange, toast]);
   
   const speakInstruction = () => {
     if (!currentInstruction || !enabled) return;
@@ -49,7 +52,7 @@ const VoiceGuidance: React.FC<VoiceGuidanceProps> = ({
     if (currentInstruction && enabled) {
       speakInstruction();
     }
-  }, [currentInstruction]);
+  }, [currentInstruction, enabled]);
   
   return (
     <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
@@ -94,12 +97,24 @@ const VoiceGuidance: React.FC<VoiceGuidanceProps> = ({
       )}
       
       {progress > 0 && (
-        <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
-          <div 
-            className="bg-purple-600 h-2.5 rounded-full"
-            style={{ width: `${progress}%` }}
-          />
+        <div className="w-full">
+          <div className="flex justify-between text-sm text-gray-600 mb-1">
+            <span>Progress</span>
+            <span>{Math.round(progress)}%</span>
+          </div>
+          <Progress value={progress} className="h-2" />
         </div>
+      )}
+      
+      {onGenerateMockData && (
+        <Button
+          variant="outline" 
+          size="sm"
+          onClick={onGenerateMockData}
+          className="mt-4 w-full text-purple-600 border-purple-200 hover:bg-purple-100"
+        >
+          Generate Demo Data
+        </Button>
       )}
     </div>
   );

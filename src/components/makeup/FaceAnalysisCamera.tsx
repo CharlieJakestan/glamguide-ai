@@ -3,6 +3,7 @@ import React, { useRef } from 'react';
 import { Loader2, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import GanOutput from './GanOutput';
+import { Progress } from '@/components/ui/progress';
 
 interface FaceAnalysisProps {
   cameraActive: boolean;
@@ -60,12 +61,26 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisProps> = ({
         )}
         
         {/* Progress bar */}
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200">
-          <div 
-            className="h-full bg-pink-500 transition-all duration-300"
-            style={{ width: `${progressPercentage}%` }}
+        <div className="absolute bottom-0 left-0 right-0 h-2">
+          <Progress 
+            value={progressPercentage}
+            className="rounded-none"
           />
         </div>
+      </div>
+      
+      {/* Capture button */}
+      <div className="flex justify-center">
+        <Button 
+          onClick={onCaptureAndAnalyze}
+          disabled={isAnalyzing}
+          className="bg-purple-600 hover:bg-purple-700"
+        >
+          {isAnalyzing ? (
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          ) : null}
+          {isAnalyzing ? "Analyzing..." : "Analyze Facial Features"}
+        </Button>
       </div>
       
       {/* Analysis Results Display */}
@@ -106,6 +121,13 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisProps> = ({
           <div className="flex items-start">
             <Volume2 className="h-5 w-5 text-purple-600 mr-2 mt-0.5" />
             <p className="text-purple-800 flex-1">{currentGuidance}</p>
+          </div>
+          <div className="mt-3">
+            <div className="flex justify-between text-sm text-purple-700 mb-1">
+              <span>Application Progress</span>
+              <span>{Math.round(progressPercentage)}%</span>
+            </div>
+            <Progress value={progressPercentage} className="h-2" />
           </div>
         </div>
       )}
