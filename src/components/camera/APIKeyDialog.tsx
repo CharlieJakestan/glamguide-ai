@@ -27,17 +27,21 @@ const APIKeyDialog: React.FC<APIKeyDialogProps> = ({ open, onOpenChange }) => {
   useEffect(() => {
     const savedKey = getApiKey();
     if (!savedKey) {
+      // This is the permanent API key to avoid asking repeatedly
       const defaultKey = 'sk_0dfcb07ba1e4d72443fcb5385899c03e9106d3d27ddaadc2';
       setApiKey(defaultKey);
       setStateApiKey(defaultKey);
       
       toast({
         title: "API Key Auto-configured",
-        description: "Voice guidance has been automatically enabled with your ElevenLabs API key.",
+        description: "Voice guidance has been automatically enabled with the ElevenLabs API key.",
         variant: "default",
       });
+      
+      // Close the dialog if it was opened to get an API key
+      onOpenChange(false);
     }
-  }, [toast]);
+  }, [toast, onOpenChange]);
   
   const handleSave = () => {
     if (!apiKey.trim()) {
@@ -64,18 +68,9 @@ const APIKeyDialog: React.FC<APIKeyDialogProps> = ({ open, onOpenChange }) => {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Enter Eleven Labs API Key</DialogTitle>
+          <DialogTitle>Voice Guidance Settings</DialogTitle>
           <DialogDescription>
-            To enable AI voice guidance, please enter your Eleven Labs API key.
-            You can get a key by signing up at{' '}
-            <a 
-              href="https://elevenlabs.io" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-purple-600 hover:underline"
-            >
-              elevenlabs.io
-            </a>
+            Voice guidance is already configured and ready to use. You can adjust settings below if needed.
           </DialogDescription>
         </DialogHeader>
         
@@ -83,7 +78,7 @@ const APIKeyDialog: React.FC<APIKeyDialogProps> = ({ open, onOpenChange }) => {
           <Key className="h-5 w-5 text-gray-500" />
           <Input
             type="password"
-            placeholder="Enter your API key"
+            placeholder="ElevenLabs API key (already configured)"
             value={apiKey}
             onChange={(e) => setStateApiKey(e.target.value)}
             className="flex-1"
@@ -95,7 +90,7 @@ const APIKeyDialog: React.FC<APIKeyDialogProps> = ({ open, onOpenChange }) => {
             Cancel
           </Button>
           <Button type="submit" onClick={handleSave}>
-            Save API Key
+            Save Settings
           </Button>
         </DialogFooter>
       </DialogContent>

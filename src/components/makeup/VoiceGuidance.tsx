@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { VolumeUp, VolumeX } from 'lucide-react';
+import { Volume2, VolumeX } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -56,7 +56,7 @@ const VoiceGuidance: React.FC<VoiceGuidanceProps> = ({
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center">
           {enabled ? (
-            <VolumeUp className="text-purple-600 mr-2 h-5 w-5" />
+            <Volume2 className="text-purple-600 mr-2 h-5 w-5" />
           ) : (
             <VolumeX className="text-gray-400 mr-2 h-5 w-5" />
           )}
@@ -69,14 +69,6 @@ const VoiceGuidance: React.FC<VoiceGuidanceProps> = ({
           id="voice-toggle"
           checked={enabled}
           onCheckedChange={(checked) => {
-            if (checked && !apiKey) {
-              toast({
-                title: "API Key Required",
-                description: "Please set an ElevenLabs API key to enable voice guidance.",
-                variant: "destructive",
-              });
-              return;
-            }
             onEnabledChange(checked);
           }}
         />
@@ -95,7 +87,7 @@ const VoiceGuidance: React.FC<VoiceGuidanceProps> = ({
               onClick={speakInstruction}
               className="mt-2 text-purple-600 hover:text-purple-700 hover:bg-purple-100"
             >
-              <VolumeUp className="mr-1 h-4 w-4" /> Repeat
+              <Volume2 className="mr-1 h-4 w-4" /> Repeat
             </Button>
           )}
         </div>
