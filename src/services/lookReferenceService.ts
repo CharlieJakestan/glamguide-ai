@@ -21,6 +21,15 @@ export interface ReferenceLook {
   }[];
 }
 
+// Updated interface for steps with customization property
+export interface CustomizedStep {
+  order: number;
+  area: string;
+  instruction: string;
+  technique: string;
+  customization?: string;
+}
+
 // Casual day soft glam look based on the provided image
 const casualSoftGlamLook: ReferenceLook = {
   id: 'casual-day-soft-glam',
@@ -111,7 +120,7 @@ export const getPersonalizedInstructions = async (
     features?: string[];
   }
 ): Promise<{
-  customizedSteps: (ReferenceLook['steps'][0] & { customization?: string })[];
+  customizedSteps: CustomizedStep[];
   recommendations: string[];
 }> => {
   const lookSteps = getLookSteps(lookId);
@@ -121,7 +130,7 @@ export const getPersonalizedInstructions = async (
   // For now, we'll simulate this with some basic logic
   
   const customizedSteps = lookSteps.map(step => {
-    const customizedStep = { ...step };
+    const customizedStep: CustomizedStep = { ...step };
     
     // Add customizations based on face shape
     if (faceAnalysis.faceShape) {
@@ -137,13 +146,15 @@ export const getPersonalizedInstructions = async (
     }
     
     // Add customizations based on skin tone
-    if (faceAnalysis.skinTone && step.category === 'Cheeks') {
-      if (faceAnalysis.skinTone.toLowerCase().includes('deep') || 
-          faceAnalysis.skinTone.toLowerCase().includes('dark')) {
-        customizedStep.customization = "Choose deeper, more vibrant blush shades for rich skin tones";
-      } else if (faceAnalysis.skinTone.toLowerCase().includes('light') || 
-                faceAnalysis.skinTone.toLowerCase().includes('fair')) {
-        customizedStep.customization = "Opt for softer, more buildable application for fair skin tones";
+    if (faceAnalysis.skinTone) {
+      if (step.area === 'cheeks') {
+        if (faceAnalysis.skinTone.toLowerCase().includes('deep') || 
+            faceAnalysis.skinTone.toLowerCase().includes('dark')) {
+          customizedStep.customization = "Choose deeper, more vibrant blush shades for rich skin tones";
+        } else if (faceAnalysis.skinTone.toLowerCase().includes('light') || 
+                  faceAnalysis.skinTone.toLowerCase().includes('fair')) {
+          customizedStep.customization = "Opt for softer, more buildable application for fair skin tones";
+        }
       }
     }
     
@@ -184,14 +195,19 @@ export const saveLookFeedback = async (
   }
 ): Promise<boolean> => {
   try {
+    // Store feedback in the user_looks table instead of a non-existent table
     const { error } = await supabase
-      .from('user_look_feedback')
+      .from('user_looks')
       .insert({
         user_id: userId,
         look_id: lookId,
-        rating: feedback.rating,
-        comments: feedback.comments,
-        difficulty_level: feedback.difficultyLevel
+        custom_settings: {
+          feedback: {
+            rating: feedback.rating,
+            comments: feedback.comments,
+            difficulty_level: feedback.difficultyLevel
+          }
+        }
       });
     
     return !error;
