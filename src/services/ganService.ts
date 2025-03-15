@@ -47,6 +47,17 @@ export interface GanGenerateResponse {
  */
 export const checkGanFunction = async (): Promise<boolean> => {
   try {
+    // Try the new gan-communicate function first
+    const { data: newData, error: newError } = await supabase.functions.invoke<GanGenerateResponse>('gan-communicate', {
+      body: { action: 'check' }
+    });
+    
+    if (!newError && newData?.status === 'ok') {
+      console.log('gan-communicate function check successful:', newData);
+      return true;
+    }
+    
+    // Fall back to the old gan-generate function if the new one fails
     const { data, error } = await supabase.functions.invoke<GanGenerateResponse>('gan-generate', {
       body: { action: 'check' }
     });
@@ -71,6 +82,20 @@ export const generateMakeupLook = async (
   lookId?: string
 ): Promise<GanGenerateResponse | null> => {
   try {
+    // Try the new gan-communicate function first
+    const { data: newData, error: newError } = await supabase.functions.invoke<GanGenerateResponse>('gan-communicate', {
+      body: {
+        action: 'generate',
+        parameters,
+        lookId
+      }
+    });
+    
+    if (!newError) {
+      return newData;
+    }
+    
+    // Fall back to the old gan-generate function if the new one fails
     const { data, error } = await supabase.functions.invoke<GanGenerateResponse>('gan-generate', {
       body: {
         action: 'generate',
@@ -99,6 +124,20 @@ export const analyzeFacialImage = async (
   lookId?: string
 ): Promise<GanGenerateResponse | null> => {
   try {
+    // Try the new gan-communicate function first
+    const { data: newData, error: newError } = await supabase.functions.invoke<GanGenerateResponse>('gan-communicate', {
+      body: {
+        action: 'analyze',
+        image: imageBase64,
+        lookId
+      }
+    });
+    
+    if (!newError) {
+      return newData;
+    }
+    
+    // Fall back to the old gan-generate function if the new one fails
     const { data, error } = await supabase.functions.invoke<GanGenerateResponse>('gan-generate', {
       body: {
         action: 'analyze',

@@ -20,57 +20,33 @@ interface APIKeyDialogProps {
 }
 
 const APIKeyDialog: React.FC<APIKeyDialogProps> = ({ open, onOpenChange }) => {
-  const [apiKey, setStateApiKey] = useState<string>(getApiKey() || '');
+  const [apiKey, setStateApiKey] = useState<string>('');
   const { toast } = useToast();
   
-  // Initialize with the default ElevenLabs API key to prevent repeated prompts
+  // Initialize with the default ElevenLabs API key
   useEffect(() => {
-    const savedKey = getApiKey();
-    if (!savedKey) {
-      // This is the permanent API key to avoid asking repeatedly
-      const defaultKey = 'sk_0dfcb07ba1e4d72443fcb5385899c03e9106d3d27ddaadc2';
-      setApiKey(defaultKey);
-      setStateApiKey(defaultKey);
-      
-      toast({
-        title: "Voice Guidance Ready",
-        description: "Voice guidance has been automatically configured.",
-        variant: "default",
-      });
-      
-      // Close the dialog if it was opened automatically
-      onOpenChange(false);
-    }
-  }, [onOpenChange, toast]);
+    // This is the permanent API key
+    const defaultKey = 'sk_0dfcb07ba1e4d72443fcb5385899c03e9106d3d27ddaadc2';
+    setApiKey(defaultKey);
+    setStateApiKey(defaultKey);
+    
+    // Close the dialog immediately - never show it
+    onOpenChange(false);
+  }, [onOpenChange]);
   
   const handleSave = () => {
-    if (!apiKey.trim()) {
-      toast({
-        title: "API Key Required",
-        description: "Please enter a valid API key to enable voice guidance.",
-        variant: "destructive",
-      });
-      return;
-    }
-    
     setApiKey(apiKey.trim());
-    
-    toast({
-      title: "API Key Saved",
-      description: "Voice guidance is now available with your custom API key.",
-      variant: "default",
-    });
-    
     onOpenChange(false);
   };
   
+  // This component should never be shown
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={false} onOpenChange={() => onOpenChange(false)}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Voice Guidance Settings</DialogTitle>
           <DialogDescription>
-            Voice guidance is already configured and ready to use. You can adjust settings below if needed.
+            Voice guidance is already configured and ready to use.
           </DialogDescription>
         </DialogHeader>
         
