@@ -4,6 +4,8 @@ import { useToast } from '@/hooks/use-toast';
 import { analyzeFacialImage } from '@/services/ganService';
 import { speakInstruction } from '@/services/speechService';
 import { useMockFacialData } from './useMockFacialData';
+import { useAnalysisProgress } from './useAnalysisProgress';
+import { useAnalysisState } from './useAnalysisState';
 
 export interface FacialTraits {
   skinTone: string;
@@ -14,69 +16,25 @@ export interface FacialTraits {
 
 export const useFaceAnalysis = (voiceEnabled: boolean) => {
   const { toast } = useToast();
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [progressPercentage, setProgressPercentage] = useState(0);
-  const [currentGuidance, setCurrentGuidance] = useState<string>("");
-  const [detectedFacialTraits, setDetectedFacialTraits] = useState<FacialTraits | null>(null);
-  const [analysisImage, setAnalysisImage] = useState<string | null>(null);
-  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const { 
+    streamRef,
+    stopCameraStream
+  } = useCameraStream();
   
-  const streamRef = useRef<MediaStream | null>(null);
-  const progressIntervalRef = useRef<number | null>(null);
+  const {
+    isAnalyzing, setIsAnalyzing,
+    analysisImage, setAnalysisImage,
+    analysisError, setAnalysisError,
+    detectedFacialTraits, setDetectedFacialTraits
+  } = useAnalysisState();
+  
+  const {
+    progressPercentage, setProgressPercentage,
+    currentGuidance, setCurrentGuidance,
+    simulateProgressIncrease
+  } = useAnalysisProgress();
   
   const { generateMockFacialTraits, generateMockGuidance } = useMockFacialData();
-  
-  // Clean up progress interval on unmount
-  useEffect(() => {
-    return () => {
-      if (progressIntervalRef.current) {
-        window.clearInterval(progressIntervalRef.current);
-      }
-    };
-  }, []);
-  
-  const stopCameraStream = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-  };
-  
-  const simulateProgressIncrease = () => {
-    if (progressIntervalRef.current) {
-      window.clearInterval(progressIntervalRef.current);
-    }
-    
-    setProgressPercentage(0);
-    
-    progressIntervalRef.current = window.setInterval(() => {
-      setProgressPercentage(prev => {
-        const newValue = prev + (Math.random() * 5);
-        if (newValue >= 100) {
-          if (progressIntervalRef.current) {
-            window.clearInterval(progressIntervalRef.current);
-          }
-          return 100;
-        }
-        return newValue;
-      });
-    }, 500);
-  };
-  
-  // Effect to update guidance based on progress
-  useEffect(() => {
-    if (progressPercentage > 0 && detectedFacialTraits) {
-      const guidance = generateMockGuidance(progressPercentage);
-      setCurrentGuidance(guidance);
-      
-      // Speak the guidance if voice is enabled and progress hits certain thresholds
-      if (voiceEnabled && 
-          (progressPercentage === 100 || 
-           Math.floor(progressPercentage / 20) !== Math.floor((progressPercentage - 1) / 20))) {
-        speakInstruction(guidance);
-      }
-    }
-  }, [progressPercentage, detectedFacialTraits, voiceEnabled, generateMockGuidance]);
   
   const analyzeFace = async (videoElement: HTMLVideoElement) => {
     try {
@@ -187,4 +145,25 @@ export const useFaceAnalysis = (voiceEnabled: boolean) => {
     stopCameraStream,
     setProgressPercentage,
   };
+};
+
+// Camera stream management hook
+const useCameraStream = () => {
+  const streamRef = useRef<MediaStream | null>(null);
+  
+  const stopCameraStream = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+  };
+  
+  // Clean up stream on unmount
+  useEffect(() => {
+    return () => {
+      stopCameraStream();
+    };
+  }, []);
+  
+  return { streamRef, stopCameraStream };
 };

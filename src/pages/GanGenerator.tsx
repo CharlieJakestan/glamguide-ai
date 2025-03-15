@@ -1,8 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
-import { Sparkles } from 'lucide-react';
 import Layout from '@/components/Layout';
 import { useToast } from '@/hooks/use-toast';
-import { getApiKey, setApiKey } from '@/services/speechService';
+import { setApiKey } from '@/services/speechService';
 import { analyzeFacialImage } from '@/services/ganService';
 import SetupStatusPanel from '@/components/makeup/SetupStatusPanel';
 import ReadyToUsePanel from '@/components/makeup/ReadyToUsePanel';
@@ -13,40 +13,36 @@ import { initFaceDetection } from '@/lib/faceDetection';
 import MakeupTips from '@/components/makeup/MakeupTips';
 import { useSetupStatus } from '@/hooks/useSetupStatus';
 import { useCamera } from '@/hooks/useCamera';
-
-const MAKEUP_TIPS = [
-  "Glow with a soft blush!",
-  "For natural brows, brush them upward first.",
-  "Hydrate lips before applying lipstick.",
-  "Apply concealer in a triangle under eyes.",
-  "Set your makeup with a fine mist setting spray.",
-  "Cream blush gives a natural dewy finish.",
-  "Use an eyeshadow primer for longer-lasting color.",
-  "Apply mascara from roots to tips for fuller lashes.",
-  "Warm cream products with fingertips before applying.",
-  "Use a small brush for precise highlight application."
-];
+import { useFaceDetection } from '@/hooks/useFaceDetection';
+import { useAnalysisSetup } from '@/hooks/useAnalysisSetup';
 
 const GanGenerator = () => {
   const { toast } = useToast();
-  const [faceDetectionReady, setFaceDetectionReady] = useState(false);
-  const [voiceEnabled, setVoiceEnabled] = useState(true);
-  const [currentGuidance, setCurrentGuidance] = useState<string>("");
-  const [progressPercentage, setProgressPercentage] = useState(0);
-  const [detectedFacialTraits, setDetectedFacialTraits] = useState<{
-    skinTone: string;
-    faceShape: string;
-    features: string[];
-    recommendations: string[];
-  } | null>(null);
-  const [analysisImage, setAnalysisImage] = useState<string | null>(null);
-  const [analysisError, setAnalysisError] = useState<string | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [referenceLooks, setReferenceLooks] = useState<ReferenceLook[]>([]);
-  const [selectedLookId, setSelectedLookId] = useState<string | null>(null);
+  const { 
+    isLoading, setupStatus, modelStatus, 
+    edgeFunctionStatus, checkStatus 
+  } = useSetupStatus();
   
-  const { isLoading, setupStatus, modelStatus, edgeFunctionStatus, checkStatus } = useSetupStatus();
-  const { cameraActive, toggleCamera, videoRef, canvasRef, streamRef, captureFrame } = useCamera();
+  const { 
+    cameraActive, toggleCamera, 
+    videoRef, canvasRef, streamRef, captureFrame 
+  } = useCamera();
+  
+  const {
+    faceDetectionReady, setFaceDetectionReady
+  } = useFaceDetection({ toast });
+  
+  const {
+    voiceEnabled, setVoiceEnabled,
+    currentGuidance, setCurrentGuidance,
+    progressPercentage, setProgressPercentage,
+    detectedFacialTraits, setDetectedFacialTraits,
+    analysisImage, setAnalysisImage,
+    analysisError, setAnalysisError,
+    isAnalyzing, setIsAnalyzing,
+    referenceLooks, setReferenceLooks,
+    selectedLookId, setSelectedLookId
+  } = useAnalysisSetup();
   
   const lookGuidance = useReferenceLookGuidance({
     voiceEnabled,
@@ -68,7 +64,7 @@ const GanGenerator = () => {
     };
     
     setupFaceDetection();
-  }, [toast]);
+  }, [toast, setFaceDetectionReady]);
   
   useEffect(() => {
     const looks = getReferenceLooks();
@@ -78,13 +74,13 @@ const GanGenerator = () => {
       setSelectedLookId(looks[0].id);
       lookGuidance.setSelectedLookId(looks[0].id);
     }
-  }, [selectedLookId, lookGuidance]);
+  }, [selectedLookId, lookGuidance, setReferenceLooks, setSelectedLookId]);
   
   useEffect(() => {
     const defaultKey = "sk_0dfcb07ba1e4d72443fcb5385899c03e9106d3d27ddaadc2";
     setApiKey(defaultKey);
     setVoiceEnabled(true);
-  }, []);
+  }, [setVoiceEnabled]);
   
   const captureAndAnalyzeFace = async () => {
     if (!videoRef.current || !canvasRef.current) return;
@@ -155,52 +151,6 @@ const GanGenerator = () => {
     } finally {
       setIsAnalyzing(false);
     }
-  };
-  
-  const generateMockFacialAnalysis = () => {
-    const skinTones = ['Fair', 'Light', 'Medium', 'Olive', 'Tan', 'Deep', 'Rich'];
-    const faceShapes = ['Oval', 'Round', 'Square', 'Heart', 'Diamond', 'Rectangle'];
-    const features = [
-      'Wide-set eyes', 'Close-set eyes', 'Hooded eyes', 'Full lips', 'Thin lips',
-      'High cheekbones', 'Strong jawline', 'Soft jawline', 'Strong brow', 'Soft brow'
-    ];
-    const recommendations = [
-      'Use a foundation with yellow undertones to complement your skin tone',
-      'Apply bronzer along the temples and jawline to define your face shape',
-      'Define your brows with a slightly angled shape to balance your features',
-      'Try a cream blush on the apples of your cheeks for a natural flush',
-      'Apply highlighter to your cheekbones to enhance your facial structure'
-    ];
-    
-    const skinTone = skinTones[Math.floor(Math.random() * skinTones.length)];
-    const faceShape = faceShapes[Math.floor(Math.random() * faceShapes.length)];
-    
-    const selectedFeatures: string[] = [];
-    const featureCount = Math.floor(Math.random() * 2) + 2;
-    
-    for (let i = 0; i < featureCount; i++) {
-      const feature = features[Math.floor(Math.random() * features.length)];
-      if (!selectedFeatures.includes(feature)) {
-        selectedFeatures.push(feature);
-      }
-    }
-    
-    const selectedRecommendations: string[] = [];
-    const recCount = Math.floor(Math.random() * 2) + 2;
-    
-    for (let i = 0; i < recCount; i++) {
-      const rec = recommendations[Math.floor(Math.random() * recommendations.length)];
-      if (!selectedRecommendations.includes(rec)) {
-        selectedRecommendations.push(rec);
-      }
-    }
-    
-    return {
-      skinTone,
-      faceShape,
-      features: selectedFeatures,
-      recommendations: selectedRecommendations
-    };
   };
   
   const stepNames = lookGuidance.selectedLook?.steps.map(step => step.instruction) || [];
@@ -280,6 +230,52 @@ const GanGenerator = () => {
       </div>
     </Layout>
   );
+};
+
+const generateMockFacialAnalysis = () => {
+  const skinTones = ['Fair', 'Light', 'Medium', 'Olive', 'Tan', 'Deep', 'Rich'];
+  const faceShapes = ['Oval', 'Round', 'Square', 'Heart', 'Diamond', 'Rectangle'];
+  const features = [
+    'Wide-set eyes', 'Close-set eyes', 'Hooded eyes', 'Full lips', 'Thin lips',
+    'High cheekbones', 'Strong jawline', 'Soft jawline', 'Strong brow', 'Soft brow'
+  ];
+  const recommendations = [
+    'Use a foundation with yellow undertones to complement your skin tone',
+    'Apply bronzer along the temples and jawline to define your face shape',
+    'Define your brows with a slightly angled shape to balance your features',
+    'Try a cream blush on the apples of your cheeks for a natural flush',
+    'Apply highlighter to your cheekbones to enhance your facial structure'
+  ];
+  
+  const skinTone = skinTones[Math.floor(Math.random() * skinTones.length)];
+  const faceShape = faceShapes[Math.floor(Math.random() * faceShapes.length)];
+  
+  const selectedFeatures: string[] = [];
+  const featureCount = Math.floor(Math.random() * 2) + 2;
+  
+  for (let i = 0; i < featureCount; i++) {
+    const feature = features[Math.floor(Math.random() * features.length)];
+    if (!selectedFeatures.includes(feature)) {
+      selectedFeatures.push(feature);
+    }
+  }
+  
+  const selectedRecommendations: string[] = [];
+  const recCount = Math.floor(Math.random() * 2) + 2;
+  
+  for (let i = 0; i < recCount; i++) {
+    const rec = recommendations[Math.floor(Math.random() * recommendations.length)];
+    if (!selectedRecommendations.includes(rec)) {
+      selectedRecommendations.push(rec);
+    }
+  }
+  
+  return {
+    skinTone,
+    faceShape,
+    features: selectedFeatures,
+    recommendations: selectedRecommendations
+  };
 };
 
 export default GanGenerator;

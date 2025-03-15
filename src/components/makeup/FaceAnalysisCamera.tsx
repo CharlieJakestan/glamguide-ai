@@ -6,7 +6,8 @@ import GanOutput from './GanOutput';
 import { Progress } from '@/components/ui/progress';
 import LookProgressTracker from './LookProgressTracker';
 import LookDetailsPanel from './LookDetailsPanel';
-import { detectFacialLandmarks } from '@/lib/faceDetection';
+import { detectFacialLandmarks, getMovementTrends } from '@/lib/faceDetection';
+import FacialAnalysisDisplay from './FacialAnalysisDisplay';
 
 interface FaceAnalysisProps {
   cameraActive: boolean;
@@ -61,7 +62,9 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisProps> = ({
   canvasRef
 }) => {
   const [faceDetected, setFaceDetected] = useState(false);
+  const [movementData, setMovementData] = useState({ x: 0, y: 0, magnitude: 0 });
   const faceDetectionIntervalRef = useRef<number | null>(null);
+  const movementAnalysisIntervalRef = useRef<number | null>(null);
   
   // Run face detection on an interval when camera is active
   useEffect(() => {
@@ -70,6 +73,10 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisProps> = ({
       if (faceDetectionIntervalRef.current) {
         window.clearInterval(faceDetectionIntervalRef.current);
         faceDetectionIntervalRef.current = null;
+      }
+      if (movementAnalysisIntervalRef.current) {
+        window.clearInterval(movementAnalysisIntervalRef.current);
+        movementAnalysisIntervalRef.current = null;
       }
       return;
     }
@@ -82,10 +89,25 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisProps> = ({
       }
     }, 1000);
     
+    // Set up interval for movement analysis
+    movementAnalysisIntervalRef.current = window.setInterval(() => {
+      const trends = getMovementTrends();
+      setMovementData(trends);
+      
+      // Log significant movements for AI learning
+      if (trends.magnitude > 5) {
+        console.log('Significant movement detected:', trends);
+      }
+    }, 2000);
+    
     return () => {
       if (faceDetectionIntervalRef.current) {
         window.clearInterval(faceDetectionIntervalRef.current);
         faceDetectionIntervalRef.current = null;
+      }
+      if (movementAnalysisIntervalRef.current) {
+        window.clearInterval(movementAnalysisIntervalRef.current);
+        movementAnalysisIntervalRef.current = null;
       }
     };
   }, [cameraActive, videoRef]);
@@ -133,6 +155,13 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisProps> = ({
                 className="rounded-none"
               />
             </div>
+            
+            {/* Movement debugging overlay - only in dev mode */}
+            {faceDetected && movementData.magnitude > 0 && (
+              <div className="absolute top-2 right-2 bg-black/50 text-white text-xs p-1 rounded">
+                Movement: {movementData.magnitude.toFixed(1)}
+              </div>
+            )}
           </div>
           
           {/* Step navigation controls */}
@@ -218,36 +247,13 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisProps> = ({
         </div>
       )}
       
-      {/* Analysis Results Display */}
+      {/* Enhanced Facial Analysis Display */}
       {detectedFacialTraits && (
-        <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-          <h4 className="font-medium text-purple-800 mb-3">Your Facial Analysis</h4>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-purple-700"><strong>Skin Tone:</strong> {detectedFacialTraits.skinTone}</p>
-              <p className="text-purple-700"><strong>Face Shape:</strong> {detectedFacialTraits.faceShape}</p>
-            </div>
-            <div>
-              <p className="text-purple-700"><strong>Features:</strong></p>
-              <ul className="list-disc list-inside text-purple-600 text-sm">
-                {detectedFacialTraits.features.map((feature, index) => (
-                  <li key={index}>{feature}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-          
-          {detectedFacialTraits.recommendations.length > 0 && (
-            <div className="mt-3">
-              <p className="text-purple-800 font-medium">Personalized Recommendations:</p>
-              <ul className="list-disc list-inside text-purple-600 text-sm mt-1">
-                {detectedFacialTraits.recommendations.map((rec, index) => (
-                  <li key={index}>{rec}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
+        <FacialAnalysisDisplay
+          detectedFacialTraits={detectedFacialTraits}
+          voiceEnabled={voiceEnabled}
+          analysisImage={analysisImage}
+        />
       )}
       
       {/* Look details */}
@@ -261,7 +267,7 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisProps> = ({
       )}
       
       {/* Generated Look Display */}
-      {analysisImage && (
+      {analysisImage && !detectedFacialTraits && (
         <GanOutput
           imageUrl={analysisImage}
           isLoading={isAnalyzing}

@@ -1,5 +1,12 @@
-
 import * as faceapi from 'face-api.js';
+
+// Last detected landmarks for movement tracking
+let lastDetectedLandmarks: faceapi.FaceLandmarks68 | null = null;
+let movementHistory: Array<{x: number, y: number}> = [];
+const MAX_HISTORY = 10; // Keep track of last 10 movements
+
+// Movement threshold for detection (in pixels)
+const MOVEMENT_THRESHOLD = 3;
 
 // Updated model loading with CDN fallback
 export const initFaceDetection = async (maxRetries = 3): Promise<boolean> => {
@@ -63,7 +70,7 @@ export const initFaceDetection = async (maxRetries = 3): Promise<boolean> => {
   return modelsLoaded;
 };
 
-// Enhanced face detection with improved parameters for reliability
+// Enhanced face detection with improved parameters for reliability and movement tracking
 export const detectFacialLandmarks = async (video: HTMLVideoElement) => {
   if (!video) return null;
   
@@ -79,6 +86,26 @@ export const detectFacialLandmarks = async (video: HTMLVideoElement) => {
       .withFaceLandmarks();
     
     if (detections) {
+      // Track movement between detections
+      if (lastDetectedLandmarks) {
+        const movement = detectMovement(lastDetectedLandmarks, detections.landmarks);
+        if (movement) {
+          // Add to movement history
+          movementHistory.push(movement);
+          if (movementHistory.length > MAX_HISTORY) {
+            movementHistory.shift(); // Remove oldest entry
+          }
+          
+          // Log significant movements for AI learning
+          if (Math.abs(movement.x) > MOVEMENT_THRESHOLD || Math.abs(movement.y) > MOVEMENT_THRESHOLD) {
+            console.log('Significant face movement detected:', movement);
+          }
+        }
+      }
+      
+      // Update last detected landmarks
+      lastDetectedLandmarks = detections.landmarks;
+      
       console.log('Face detected successfully');
       return detections;
     } else {
@@ -94,6 +121,12 @@ export const detectFacialLandmarks = async (video: HTMLVideoElement) => {
         
       if (fallbackDetections) {
         console.log('Face detected with fallback parameters');
+        
+        // Update last detected landmarks
+        lastDetectedLandmarks = fallbackDetections.landmarks;
+      } else {
+        // Clear last landmarks if face is lost
+        lastDetectedLandmarks = null;
       }
       
       return fallbackDetections;
@@ -102,6 +135,40 @@ export const detectFacialLandmarks = async (video: HTMLVideoElement) => {
     console.error('Error detecting facial landmarks:', error);
     return null;
   }
+};
+
+// Detect movement between two sets of landmarks
+const detectMovement = (
+  previous: faceapi.FaceLandmarks68, 
+  current: faceapi.FaceLandmarks68
+): {x: number, y: number} | null => {
+  try {
+    // Compare nose position as central reference point
+    const prevNose = previous.getNose()[0]; // Nose tip
+    const currNose = current.getNose()[0];
+    
+    return {
+      x: currNose.x - prevNose.x,
+      y: currNose.y - prevNose.y
+    };
+  } catch (error) {
+    console.error('Error detecting movement:', error);
+    return null;
+  }
+};
+
+// Get current movement trends from history
+export const getMovementTrends = () => {
+  if (movementHistory.length < 2) return { x: 0, y: 0, magnitude: 0 };
+  
+  // Calculate average movement from recent history
+  const avgX = movementHistory.reduce((sum, m) => sum + m.x, 0) / movementHistory.length;
+  const avgY = movementHistory.reduce((sum, m) => sum + m.y, 0) / movementHistory.length;
+  
+  // Calculate magnitude of movement
+  const magnitude = Math.sqrt(avgX * avgX + avgY * avgY);
+  
+  return { x: avgX, y: avgY, magnitude };
 };
 
 // Apply virtual makeup based on detected landmarks
@@ -227,4 +294,13 @@ const applyEyeshadow = (
   ctx.closePath();
   ctx.fillStyle = `${color}${Math.round(intensity * 255).toString(16).padStart(2, '0')}`;
   ctx.fill();
+};
+
+// Export movement history for AI learning
+export const getMovementHistory = () => [...movementHistory];
+
+// Reset tracking (e.g., when session ends)
+export const resetTracking = () => {
+  lastDetectedLandmarks = null;
+  movementHistory = [];
 };
