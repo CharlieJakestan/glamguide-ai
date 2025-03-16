@@ -1,6 +1,5 @@
-
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { detectMakeupObjects } from '@/lib/faceDetection';
+import { useState, useEffect, useRef } from 'react';
+import { detectMakeupTools } from '@/lib/faceDetection';
 
 export interface DetectedObject {
   type: string;
@@ -10,136 +9,93 @@ export interface DetectedObject {
 
 interface UseMakeupObjectDetectionProps {
   videoRef: React.RefObject<HTMLVideoElement>;
+  facePosition: { x: number; y: number; width: number; height: number } | null;
   enabled: boolean;
-  faceDetected: boolean;
-  currentStep?: string;
-  onObjectDetected?: (object: DetectedObject) => void;
+  onObjectDetected?: (objects: DetectedObject[]) => void;
 }
 
 export const useMakeupObjectDetection = ({
   videoRef,
-  enabled,
-  faceDetected,
-  currentStep = '',
+  facePosition,
+  enabled = true,
   onObjectDetected
 }: UseMakeupObjectDetectionProps) => {
   const [detectedObjects, setDetectedObjects] = useState<DetectedObject[]>([]);
-  const [lastDetectedObject, setLastDetectedObject] = useState<DetectedObject | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [relevantToStep, setRelevantToStep] = useState(false);
-  
+  const [isDetecting, setIsDetecting] = useState(false);
   const detectionIntervalRef = useRef<number | null>(null);
-  const lastDetectionTime = useRef(0);
-  const detectionHistoryRef = useRef<Map<string, number>>(new Map());
-  const objectDetectionConfidence = useRef<Map<string, number>>(new Map());
+  const lastDetectionTime = useRef<number>(0);
   
-  // Clear old objects from history 
-  const cleanupHistory = useCallback(() => {
-    const now = Date.now();
-    const MAX_AGE = 60000; // 1 minute
-    
-    for (const [type, timestamp] of detectionHistoryRef.current.entries()) {
-      if (now - timestamp > MAX_AGE) {
-        detectionHistoryRef.current.delete(type);
-        objectDetectionConfidence.current.delete(type);
-      }
-    }
-  }, []);
+  // Tools that we've seen so far (for UI display)
+  const [detectedMakeupTools, setDetectedMakeupTools] = useState<Array<{
+    type: string;
+    confidence: number;
+    lastSeen: number;
+  }>>([]);
   
-  // Check if an object is relevant to the current makeup step
-  const checkRelevance = useCallback((objectType: string, step: string) => {
-    const relevanceMap: Record<string, string[]> = {
-      'foundation': ['foundation', 'primer', 'base', 'sponge'],
-      'concealer': ['concealer', 'sponge', 'brush'],
-      'powder': ['powder', 'brush', 'puff'],
-      'contour': ['contour', 'brush', 'bronzer'],
-      'blush': ['blush', 'brush', 'cheek'],
-      'highlight': ['highlight', 'highlighter', 'brush', 'glow'],
-      'eyeshadow': ['eyeshadow', 'palette', 'eye', 'brush', 'shadow'],
-      'eyeliner': ['eyeliner', 'liner', 'eye', 'pencil'],
-      'mascara': ['mascara', 'lash', 'wand'],
-      'lipstick': ['lipstick', 'lip', 'gloss', 'liner']
-    };
-    
-    const lowerType = objectType.toLowerCase();
-    const lowerStep = step.toLowerCase();
-    
-    // Check if any keywords from the step are in our relevance map
-    for (const [key, keywords] of Object.entries(relevanceMap)) {
-      if (lowerStep.includes(key)) {
-        // Check if the detected object type contains any relevant keywords
-        return keywords.some(keyword => lowerType.includes(keyword));
-      }
-    }
-    
-    return false;
-  }, []);
-  
-  // Run detection logic with enhanced confidence tracking
-  const runDetection = useCallback(async () => {
-    if (!videoRef.current || !enabled || !faceDetected || isProcessing) return;
+  // Detect makeup objects near the face
+  const detectObjects = async () => {
+    if (!enabled || !videoRef.current || isDetecting || !facePosition) return;
     
     const now = Date.now();
-    // Increase detection frequency for more responsive feedback
+    // Don't detect too frequently to avoid performance issues
     if (now - lastDetectionTime.current < 500) return;
     
     try {
-      setIsProcessing(true);
+      setIsDetecting(true);
       lastDetectionTime.current = now;
       
-      const objects = await detectMakeupObjects(videoRef.current);
+      const objects = await detectMakeupTools(videoRef.current, facePosition);
       
       if (objects.length > 0) {
+        console.log('Detected makeup objects:', objects);
         setDetectedObjects(objects);
         
-        // Update detection history and confidence
+        // Update the makeup tools list
+        const updatedTools = [...detectedMakeupTools];
+        
         objects.forEach(obj => {
-          const prevConfidence = objectDetectionConfidence.current.get(obj.type) || 0;
-          const updatedConfidence = Math.min(prevConfidence + 0.2, 1.0); // Increase confidence with repeated detections
+          const existingToolIndex = updatedTools.findIndex(
+            tool => tool.type.toLowerCase() === obj.type.toLowerCase()
+          );
           
-          detectionHistoryRef.current.set(obj.type, now);
-          objectDetectionConfidence.current.set(obj.type, updatedConfidence);
-          
-          // Only consider high confidence detections for UI feedback
-          if (updatedConfidence > 0.5) {
-            console.log(`High confidence detection: ${obj.type} (${updatedConfidence.toFixed(2)})`);
+          if (existingToolIndex >= 0) {
+            // Update existing tool
+            updatedTools[existingToolIndex] = {
+              ...updatedTools[existingToolIndex],
+              confidence: Math.max(updatedTools[existingToolIndex].confidence, obj.confidence),
+              lastSeen: now
+            };
+          } else {
+            // Add new tool
+            updatedTools.push({
+              type: obj.type,
+              confidence: obj.confidence,
+              lastSeen: now
+            });
           }
         });
         
-        // Find the object with highest confidence
-        const highestConfidenceObj = objects.reduce((prev, current) => 
-          (prev.confidence > current.confidence) ? prev : current
-        );
+        // Remove tools that haven't been seen in a while (10 seconds)
+        const filteredTools = updatedTools.filter(tool => now - tool.lastSeen < 10000);
+        setDetectedMakeupTools(filteredTools);
         
-        // Update last detected object
-        setLastDetectedObject(highestConfidenceObj);
-        
-        // Notify parent component
         if (onObjectDetected) {
-          onObjectDetected(highestConfidenceObj);
+          onObjectDetected(objects);
         }
-        
-        // Check if object is relevant to current step
-        if (currentStep) {
-          const isRelevant = checkRelevance(highestConfidenceObj.type, currentStep);
-          setRelevantToStep(isRelevant);
-          
-          console.log(`Detected ${highestConfidenceObj.type} - Relevant to step "${currentStep}": ${isRelevant}`);
-        }
+      } else {
+        // Clear detected objects, but keep the makeup tools list
+        setDetectedObjects([]);
       }
-      
-      // Clean up old entries
-      cleanupHistory();
     } catch (error) {
-      console.error('Error in makeup object detection:', error);
+      console.error('Error detecting makeup objects:', error);
     } finally {
-      setIsProcessing(false);
+      setIsDetecting(false);
     }
-  }, [videoRef, enabled, faceDetected, isProcessing, currentStep, checkRelevance, cleanupHistory, onObjectDetected]);
+  };
   
-  // Set up detection interval with higher frequency
+  // Set up detection interval
   useEffect(() => {
-    if (!enabled || !videoRef.current) {
+    if (!enabled) {
       if (detectionIntervalRef.current) {
         window.clearInterval(detectionIntervalRef.current);
         detectionIntervalRef.current = null;
@@ -147,8 +103,7 @@ export const useMakeupObjectDetection = ({
       return;
     }
     
-    // Run detection more frequently for better responsiveness
-    detectionIntervalRef.current = window.setInterval(runDetection, 1000);
+    detectionIntervalRef.current = window.setInterval(detectObjects, 500);
     
     return () => {
       if (detectionIntervalRef.current) {
@@ -156,22 +111,11 @@ export const useMakeupObjectDetection = ({
         detectionIntervalRef.current = null;
       }
     };
-  }, [enabled, videoRef, runDetection]);
-  
-  // Get recent detection history with confidence levels
-  const getRecentDetections = () => {
-    return Array.from(detectionHistoryRef.current.entries())
-      .sort((a, b) => b[1] - a[1]) // Sort by most recent
-      .map(([type]) => ({
-        type,
-        confidence: objectDetectionConfidence.current.get(type) || 0
-      }));
-  };
+  }, [enabled, facePosition]);
   
   return {
     detectedObjects,
-    lastDetectedObject,
-    relevantToStep,
-    getRecentDetections
+    isDetecting,
+    detectedMakeupTools
   };
 };

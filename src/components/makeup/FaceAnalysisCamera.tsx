@@ -6,7 +6,7 @@ import GanOutput from './GanOutput';
 import { Progress } from '@/components/ui/progress';
 import LookProgressTracker from './LookProgressTracker';
 import LookDetailsPanel from './LookDetailsPanel';
-import { detectFacialLandmarks, getMovementTrends } from '@/lib/faceDetection';
+import { detectFacialLandmarks, getMovementTrends, getFaceBoundingBox } from '@/lib/faceDetection';
 import FacialAnalysisDisplay from './FacialAnalysisDisplay';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -113,425 +113,384 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
       // Pulsing effect for tracking circle
       const pulseScale = 1 + Math.sin(Date.now() * 0.003) * 0.05;
       
-      // Draw face tracking indicator
+      // Draw face tracking indicator - basic version
       ctx.beginPath();
-      ctx.arc(centerX, centerY, radius * pulseScale, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(200, 100, 255, 0.6)';
+      ctx.arc(centerX, centerY, radius * pulseScale, 0, 2 * Math.PI);
+      ctx.strokeStyle = 'rgba(120, 90, 220, 0.6)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      
+      // Draw cross-hairs
+      const crosshairSize = radius * 0.2;
+      ctx.beginPath();
+      ctx.moveTo(centerX - crosshairSize, centerY);
+      ctx.lineTo(centerX + crosshairSize, centerY);
+      ctx.moveTo(centerX, centerY - crosshairSize);
+      ctx.lineTo(centerX, centerY + crosshairSize);
+      ctx.strokeStyle = 'rgba(120, 90, 220, 0.8)';
       ctx.lineWidth = 2;
       ctx.stroke();
       
-      // Add crosshair lines
-      ctx.beginPath();
-      ctx.moveTo(centerX - radius * 1.2, centerY);
-      ctx.lineTo(centerX + radius * 1.2, centerY);
-      ctx.moveTo(centerX, centerY - radius * 1.2);
-      ctx.lineTo(centerX, centerY + radius * 1.2);
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      
-      // Draw highlighted regions based on current guidance
+      // Highlight region of focus if specified
       if (highlightedRegion) {
         let regionX = centerX;
         let regionY = centerY;
-        let regionRadius = radius * 0.4;
+        let regionRadius = radius * 0.5;
         
-        switch (highlightedRegion.toLowerCase()) {
-          case 'eyes':
-            regionY = centerY - radius * 0.3;
-            break;
-          case 'lips':
-            regionY = centerY + radius * 0.5;
-            break;
-          case 'cheeks':
-            regionX = centerX + (Math.random() > 0.5 ? 1 : -1) * radius * 0.6;
-            regionY = centerY;
-            break;
-          case 'forehead':
-            regionY = centerY - radius * 0.7;
-            break;
-          case 'jawline':
-            regionY = centerY + radius * 0.7;
-            break;
+        // Adjust position based on region
+        if (highlightedRegion === 'eyes') {
+          regionY = centerY - radius * 0.3;
+          regionRadius = radius * 0.4;
+        } else if (highlightedRegion === 'lips') {
+          regionY = centerY + radius * 0.4;
+          regionRadius = radius * 0.3;
+        } else if (highlightedRegion === 'cheeks') {
+          regionX = centerX + (Math.sin(Date.now() * 0.001) > 0 ? 1 : -1) * radius * 0.5;
+          regionY = centerY;
+          regionRadius = radius * 0.3;
         }
         
-        // Draw highlighted region with pulsing effect
-        const glowScale = 1 + Math.sin(Date.now() * 0.006) * 0.3;
-        
-        // Create gradient glow
-        const gradient = ctx.createRadialGradient(
-          regionX, regionY, 0,
-          regionX, regionY, regionRadius * glowScale
-        );
-        gradient.addColorStop(0, 'rgba(255, 100, 255, 0.4)');
-        gradient.addColorStop(1, 'rgba(255, 100, 255, 0)');
-        
+        // Draw highlighted region
         ctx.beginPath();
-        ctx.arc(regionX, regionY, regionRadius * glowScale, 0, Math.PI * 2);
-        ctx.fillStyle = gradient;
+        ctx.arc(regionX, regionY, regionRadius, 0, 2 * Math.PI);
+        ctx.fillStyle = 'rgba(255, 100, 180, 0.2)';
         ctx.fill();
-        
-        // Add label
-        ctx.font = '14px Arial';
-        ctx.fillStyle = 'white';
-        ctx.textAlign = 'center';
-        ctx.fillText(highlightedRegion, regionX, regionY - regionRadius * 1.2);
+        ctx.strokeStyle = 'rgba(255, 100, 180, 0.7)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
       }
       
-      // Draw makeup tool indicators if detected
-      if (nearbyObjects.length > 0) {
+      // Draw nearby detected objects
+      if (nearbyObjects && nearbyObjects.length > 0) {
         nearbyObjects.forEach(obj => {
-          // Normalize position to canvas coordinates
-          const normalizedX = obj.position.x / videoRef.current!.videoWidth * canvas.width;
-          const normalizedY = obj.position.y / videoRef.current!.videoHeight * canvas.height;
+          const objX = obj.position.x;
+          const objY = obj.position.y;
           
-          // Draw object highlight
+          // Draw object indicator
           ctx.beginPath();
-          ctx.arc(normalizedX, normalizedY, 20, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(100, 200, 255, 0.3)';
+          ctx.arc(objX, objY, 15, 0, 2 * Math.PI);
+          ctx.fillStyle = 'rgba(50, 200, 120, 0.2)';
           ctx.fill();
-          ctx.strokeStyle = 'rgba(100, 200, 255, 0.8)';
+          ctx.strokeStyle = 'rgba(50, 200, 120, 0.8)';
           ctx.lineWidth = 2;
           ctx.stroke();
           
+          // Draw line connecting to face
+          ctx.beginPath();
+          ctx.moveTo(centerX, centerY);
+          ctx.lineTo(objX, objY);
+          ctx.strokeStyle = 'rgba(50, 200, 120, 0.4)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([5, 5]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          
           // Draw label
           ctx.font = '12px Arial';
-          ctx.fillStyle = 'white';
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
           ctx.textAlign = 'center';
-          ctx.fillText(obj.type, normalizedX, normalizedY - 25);
-          ctx.fillText(`${Math.round(obj.confidence * 100)}%`, normalizedX, normalizedY - 10);
+          ctx.fillText(obj.type, objX, objY + 25);
         });
       }
       
-      // Draw current guidance instruction
-      if (lookGuidance.currentStep >= 0) {
-        const instruction = lookGuidance.getCurrentInstruction();
-        if (instruction) {
-          const textY = canvas.height - 40;
-          
-          // Create background for text
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-          ctx.fillRect(10, textY - 20, canvas.width - 20, 30);
-          
-          // Draw text
-          ctx.font = '14px Arial';
-          ctx.fillStyle = 'white';
-          ctx.textAlign = 'center';
-          ctx.fillText(
-            instruction.instruction.length > 60 
-              ? instruction.instruction.substring(0, 60) + '...' 
-              : instruction.instruction, 
-            canvas.width / 2, 
-            textY
-          );
-        }
+      // Display movement indicator
+      if (movementData && movementData.magnitude > 1) {
+        const movX = centerX + movementData.x * canvas.width * 0.5;
+        const movY = centerY + movementData.y * canvas.height * 0.5;
+        
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.lineTo(movX, movY);
+        ctx.strokeStyle = 'rgba(255, 150, 50, 0.6)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.arc(movX, movY, 8, 0, 2 * Math.PI);
+        ctx.fillStyle = 'rgba(255, 150, 50, 0.8)';
+        ctx.fill();
       }
     } catch (error) {
-      console.error('Error drawing canvas overlays:', error);
+      console.error('Error drawing overlay:', error);
     }
-  }, [canvasRef, videoRef, faceDetected, highlightedRegion, nearbyObjects, lookGuidance]);
+  }, [canvasRef, videoRef, faceDetected, highlightedRegion, nearbyObjects, movementData]);
   
-  // Setup canvas context and animation loop
+  // Set up canvas context and render loop
   useEffect(() => {
     if (!canvasRef.current) return;
     
     canvasContextRef.current = canvasRef.current.getContext('2d');
     
-    let animationFrameId: number;
-    
-    // Animation loop for smooth canvas rendering
-    const animate = () => {
-      drawOverlay();
-      animationFrameId = requestAnimationFrame(animate);
-    };
-    
-    if (cameraActive) {
-      animate();
+    if (!canvasContextRef.current) {
+      console.error('Failed to get canvas context');
+      return;
     }
     
-    return () => {
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-      }
+    let animationFrame: number;
+    
+    const renderLoop = () => {
+      drawOverlay();
+      animationFrame = requestAnimationFrame(renderLoop);
     };
-  }, [canvasRef, cameraActive, drawOverlay]);
+    
+    animationFrame = requestAnimationFrame(renderLoop);
+    
+    return () => {
+      cancelAnimationFrame(animationFrame);
+    };
+  }, [canvasRef, drawOverlay]);
   
   // Update highlighted region based on guidance
   useEffect(() => {
     if (!currentGuidance) return;
     
-    const guidance = currentGuidance.toLowerCase();
+    const guidanceLower = currentGuidance.toLowerCase();
     
-    if (guidance.includes('eye')) setHighlightedRegion('eyes');
-    else if (guidance.includes('lip')) setHighlightedRegion('lips');
-    else if (guidance.includes('cheek') || guidance.includes('blush')) setHighlightedRegion('cheeks');
-    else if (guidance.includes('forehead')) setHighlightedRegion('forehead');
-    else if (guidance.includes('jaw')) setHighlightedRegion('jawline');
-    else if (guidance.includes('foundation') || guidance.includes('face')) setHighlightedRegion('face');
-    else setHighlightedRegion(null);
-    
+    if (guidanceLower.includes('eye') || guidanceLower.includes('brow')) {
+      setHighlightedRegion('eyes');
+    } else if (guidanceLower.includes('lip') || guidanceLower.includes('mouth')) {
+      setHighlightedRegion('lips');
+    } else if (guidanceLower.includes('cheek') || guidanceLower.includes('blush')) {
+      setHighlightedRegion('cheeks');
+    } else if (guidanceLower.includes('foundation') || guidanceLower.includes('contour')) {
+      setHighlightedRegion('face');
+    } else {
+      setHighlightedRegion(null);
+    }
   }, [currentGuidance]);
   
-  // Make canvas visible for real-time overlay
-  useEffect(() => {
-    if (canvasRef.current && videoRef.current && cameraActive) {
-      canvasRef.current.style.display = 'block';
-      canvasRef.current.style.position = 'absolute';
-      canvasRef.current.style.top = '0';
-      canvasRef.current.style.left = '0';
-      canvasRef.current.width = videoRef.current.videoWidth || 640;
-      canvasRef.current.height = videoRef.current.videoHeight || 480;
-    }
-  }, [canvasRef, videoRef, cameraActive]);
-  
-  // Get current step instruction
-  const currentInstruction = lookGuidance.getCurrentInstruction();
-  
-  // Toggle overlay visibility
-  const toggleOverlay = () => {
-    setOverlayVisible(prev => !prev);
+  const getCurrentMakeupStep = (): string => {
+    const instruction = lookGuidance.getCurrentInstruction();
+    return instruction ? instruction.instruction : '';
   };
   
   return (
-    <div className="space-y-4 mb-6">
-      <div className="flex flex-col md:flex-row gap-4">
-        <div className="w-full md:w-3/5">
-          <div className="relative bg-black rounded-lg overflow-hidden" ref={cameraContainerRef}>
-            <video 
-              ref={videoRef}
-              autoPlay 
-              playsInline
-              className="w-full h-64 object-cover"
-            />
-            <canvas 
-              ref={canvasRef} 
-              className={`absolute top-0 left-0 w-full h-full pointer-events-none z-10 ${overlayVisible ? 'opacity-100' : 'opacity-30'}`}
-            />
-            
-            {/* Toggle overlay button */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleOverlay}
-              className="absolute top-2 right-2 bg-black/30 text-white z-20 hover:bg-black/50"
-            >
-              {overlayVisible ? 'Hide Overlay' : 'Show Overlay'}
-            </Button>
-            
-            {isAnalyzing && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 z-20">
-                <div className="text-white text-center">
-                  <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
-                  <p>Analyzing your face...</p>
-                </div>
-              </div>
-            )}
-            
-            {!faceDetected && cameraActive && !isAnalyzing && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 z-20">
-                <div className="text-white text-center bg-red-900/70 p-4 rounded-lg max-w-xs">
-                  <AlertTriangle className="h-6 w-6 mx-auto mb-2" />
-                  <p>No face detected. Please position your face in the frame.</p>
-                </div>
-              </div>
-            )}
-            
-            {/* Real-time detected objects overlay */}
-            {nearbyObjects.length > 0 && (
-              <div className="absolute top-12 left-2 right-2 bg-blue-900/70 text-white text-sm p-2 rounded z-20 animate-pulse">
-                <div className="flex items-center">
-                  <Zap className="h-4 w-4 mr-2 text-yellow-300" />
-                  <span>
-                    Detected: {nearbyObjects[0].type} 
-                    ({Math.round(nearbyObjects[0].confidence * 100)}% confidence)
-                  </span>
-                </div>
-              </div>
-            )}
-            
-            {/* Activity indicator */}
-            {lastActivity && (
-              <div className="absolute bottom-12 left-2 right-2 bg-purple-900/70 text-white text-sm p-2 rounded-md z-20">
-                <p className="flex items-center">
-                  <Activity className="h-4 w-4 mr-2 text-purple-300" />
-                  {lastActivity}
-                </p>
-              </div>
-            )}
-            
-            {/* Progress bar */}
-            <div className="absolute bottom-0 left-0 right-0 h-2 z-20">
-              <Progress 
-                value={progressPercentage}
-                className="rounded-none"
-              />
-            </div>
-          </div>
+    <div className="space-y-4 mb-8">
+      <div className="bg-white rounded-xl shadow-md overflow-hidden">
+        {/* Camera container */}
+        <div ref={cameraContainerRef} className="relative aspect-video bg-gray-900">
+          {/* Video element for camera feed */}
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className={`absolute inset-0 w-full h-full object-cover ${!faceDetected ? 'opacity-60' : ''}`}
+          />
           
-          {/* Step navigation controls */}
-          {cameraActive && selectedLookId && (
-            <div className="mt-4 flex justify-between items-center">
-              <Button 
-                onClick={lookGuidance.goToPreviousStep}
-                variant="ghost"
-                size="sm"
-                disabled={lookGuidance.currentStep === 0}
-              >
-                <ChevronLeft className="h-4 w-4 mr-1" />
-                Previous
-              </Button>
-              
-              <Button
-                onClick={lookGuidance.markCompleted}
-                variant="outline"
-                size="sm"
-                className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
-              >
-                <CheckCircle className="h-4 w-4 mr-1" />
-                Mark Complete
-              </Button>
-              
-              <Button 
-                onClick={lookGuidance.goToNextStep}
-                variant="ghost"
-                size="sm"
-                disabled={lookGuidance.currentStep === lookGuidance.totalSteps - 1}
-              >
-                Next
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
+          {/* Canvas overlay for drawing face tracking */}
+          <canvas
+            ref={canvasRef}
+            className="absolute inset-0 w-full h-full"
+          />
+          
+          {/* Guidance overlay */}
+          {showGuidance && faceDetected && currentGuidance && (
+            <div className="absolute bottom-4 left-4 right-4 bg-black/50 backdrop-blur-sm p-3 rounded-lg text-white">
+              <div className="flex items-start space-x-2">
+                <div>
+                  <p className="text-sm font-medium">{currentGuidance}</p>
+                  <div className="flex items-center mt-2 space-x-1 text-xs">
+                    <Badge className="bg-purple-500">
+                      {lookGuidance.currentStep + 1}/{lookGuidance.totalSteps}
+                    </Badge>
+                    <span>{lookGuidance.stepNames[lookGuidance.currentStep]}</span>
+                  </div>
+                </div>
+              </div>
+              <Progress value={progressPercentage} className="mt-2 h-1" />
             </div>
           )}
           
-          {/* Capture button */}
-          {!detectedFacialTraits && (
-            <div className="flex justify-center mt-4">
-              <Button 
-                onClick={onCaptureAndAnalyze}
-                disabled={isAnalyzing || !faceDetected}
-                className="bg-purple-600 hover:bg-purple-700"
-              >
-                {isAnalyzing ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Camera className="h-4 w-4 mr-2" />
-                )}
-                {isAnalyzing ? "Analyzing..." : "Analyze Facial Features"}
-              </Button>
+          {/* Face detection indicator */}
+          <div 
+            className={`absolute top-4 right-4 px-2 py-1 rounded transition-colors ${
+              faceDetected 
+                ? 'bg-green-500 text-white' 
+                : 'bg-red-500 text-white'
+            }`}
+          >
+            <div className="flex items-center text-xs">
+              {faceDetected ? (
+                <>
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                  <span>Face Detected</span>
+                </>
+              ) : (
+                <>
+                  <AlertTriangle className="h-3 w-3 mr-1" />
+                  <span>No Face Detected</span>
+                </>
+              )}
+            </div>
+          </div>
+          
+          {/* Controls overlay */}
+          <div className="absolute top-4 left-4 flex items-center space-x-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="bg-black/30 border-gray-400 text-white hover:bg-black/50 hover:text-white"
+              onClick={onToggleCamera}
+            >
+              <Camera className="h-3 w-3 mr-1" />
+              {cameraActive ? 'Stop Camera' : 'Start Camera'}
+            </Button>
+            
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="bg-black/30 border-gray-400 text-white hover:bg-black/50 hover:text-white"
+              onClick={() => setOverlayVisible(!overlayVisible)}
+            >
+              <Zap className="h-3 w-3 mr-1" />
+              {overlayVisible ? 'Hide Overlay' : 'Show Overlay'}
+            </Button>
+          </div>
+          
+          {/* Loading indicator during analysis */}
+          {isAnalyzing && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+              <div className="bg-white p-4 rounded-lg flex flex-col items-center">
+                <Loader2 className="h-8 w-8 animate-spin text-purple-600 mb-2" />
+                <p className="text-purple-800 font-medium">Analyzing your face...</p>
+                <Progress value={progressPercentage} className="w-40 mt-2" />
+              </div>
             </div>
           )}
         </div>
         
-        <div className="w-full md:w-2/5">
-          {/* Enhanced voice guidance with more data */}
-          {showGuidance && (
-            <VoiceGuidance
-              enabled={voiceEnabled}
-              onEnabledChange={onVoiceEnabledChange}
-              currentInstruction={currentInstruction?.instruction}
-              progress={progressPercentage}
-              faceDetected={faceDetected}
-              lastActivity={lastActivity}
-              currentMakeupStep={lookGuidance.stepNames[lookGuidance.currentStep] || ""}
-              detectedObjects={nearbyObjects}
-              movementData={movementData}
-              detectedMakeupTools={detectedMakeupTools}
-            />
-          )}
-          
-          {selectedLookId && availableLooks.length > 0 && (
-            <div className="mt-4">
-              {/* Step progress tracker */}
-              <LookProgressTracker 
-                currentStep={lookGuidance.currentStep}
-                totalSteps={lookGuidance.totalSteps}
-                completedSteps={lookGuidance.completedSteps}
-                stepNames={lookGuidance.stepNames}
-                onSelectStep={lookGuidance.selectStep}
-              />
+        {/* Look control buttons */}
+        <div className="p-4 bg-gray-50 border-t border-gray-200">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              {lookGuidance.currentStep > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={lookGuidance.goToPreviousStep}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Previous Step
+                </Button>
+              )}
+              
+              <Button
+                variant="default"
+                size="sm"
+                onClick={onCaptureAndAnalyze}
+                disabled={isAnalyzing}
+              >
+                {isAnalyzing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <Camera className="h-4 w-4 mr-1" />
+                    Capture & Analyze
+                  </>
+                )}
+              </Button>
+              
+              {lookGuidance.currentStep < lookGuidance.totalSteps - 1 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={lookGuidance.goToNextStep}
+                >
+                  Next Step
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              )}
             </div>
-          )}
+            
+            <Button
+              variant={lookGuidance.completedSteps.includes(lookGuidance.currentStep) ? "ghost" : "outline"}
+              size="sm"
+              onClick={lookGuidance.markCompleted}
+              className={lookGuidance.completedSteps.includes(lookGuidance.currentStep) ? "bg-green-50 text-green-600" : ""}
+            >
+              {lookGuidance.completedSteps.includes(lookGuidance.currentStep) ? (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-1 text-green-500" />
+                  Completed
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-1" />
+                  Mark as Complete
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </div>
       
-      {/* Current step guidance with AI feedback */}
-      {currentInstruction && (
-        <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-4 rounded-lg border border-purple-200">
-          <div className="flex items-start">
-            <Volume2 className={`h-5 w-5 ${voiceEnabled ? 'text-purple-600' : 'text-gray-400'} mr-2 mt-0.5`} />
-            <div className="flex-1">
-              <p className="text-purple-800 font-medium">{currentInstruction.instruction}</p>
-              {currentInstruction.customization && (
-                <p className="text-purple-600 text-sm mt-1 italic">{currentInstruction.customization}</p>
-              )}
-              
-              {/* AI dynamic feedback based on detected actions */}
-              {lastActivity && (
-                <Alert className="mt-2 bg-yellow-50 border-yellow-200">
-                  <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                  <AlertDescription className="text-yellow-700 text-sm">
-                    {lastActivity.includes("Detected") 
-                      ? `I noticed you're using ${lastActivity.replace("Detected ", "").toLowerCase()}.` 
-                      : `I observed: ${lastActivity}`}
-                    {lastActivity.includes("correctly") 
-                      ? " Great job! Continue with this technique." 
-                      : ` Make sure to follow the current step: ${currentInstruction.instruction}`}
-                  </AlertDescription>
-                </Alert>
-              )}
-              
-              {/* Movement guidance */}
-              {movementData && movementData.magnitude > 5 && (
-                <Alert className="mt-2 bg-blue-50 border-blue-200">
-                  <Info className="h-4 w-4 text-blue-500" />
-                  <AlertDescription className="text-blue-700 text-sm">
-                    I notice you're moving quite a bit. For more precise makeup application, try to keep your head relatively still.
-                  </AlertDescription>
-                </Alert>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Enhanced Facial Analysis Display with more data */}
-      {detectedFacialTraits && (
-        <FacialAnalysisDisplay
-          detectedFacialTraits={detectedFacialTraits}
-          voiceEnabled={voiceEnabled}
-          analysisImage={analysisImage}
-          movementData={movementData}
-          lastActivity={lastActivity || undefined}
-          onReanalyze={onCaptureAndAnalyze}
-          nearbyObjects={nearbyObjects}
-          faceDetectionConfidence={faceDetected ? 0.8 : 0}
-          detectedMakeupTools={detectedMakeupTools}
-        />
-      )}
-      
-      {/* Look details */}
-      {selectedLookId && availableLooks.length > 0 && (
-        <div className="mt-4">
-          <LookDetailsPanel 
-            look={availableLooks.find(look => look.id === selectedLookId)!}
-            personalizedRecommendations={detectedFacialTraits?.recommendations}
+      {/* Look details and progress */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="md:col-span-2">
+          <LookDetailsPanel
+            looks={availableLooks}
+            selectedLookId={selectedLookId}
+            onSelectLook={onSelectLook}
+            showRecommendations={!!detectedFacialTraits}
           />
+          
+          {/* Facial analysis results */}
+          {detectedFacialTraits && (
+            <FacialAnalysisDisplay
+              detectedFacialTraits={detectedFacialTraits}
+              voiceEnabled={voiceEnabled}
+              analysisImage={analysisImage}
+              onReanalyze={onCaptureAndAnalyze}
+              isAnalyzing={isAnalyzing}
+              movementData={movementData}
+              lastActivity={lastActivity || undefined}
+              nearbyObjects={nearbyObjects}
+              faceDetectionConfidence={faceDetected ? 0.8 : 0.1}
+              detectedMakeupTools={detectedMakeupTools}
+            />
+          )}
         </div>
-      )}
-      
-      {/* Enhanced GAN Output with more visual feedback */}
-      {analysisImage && !detectedFacialTraits && (
-        <GanOutput
-          imageUrl={analysisImage}
-          isLoading={isAnalyzing}
-          error={analysisError || undefined}
-          className="w-full h-64"
-          facialAnalysis={detectedFacialTraits ?? undefined}
-          onRegenerate={onCaptureAndAnalyze}
-          progressPercentage={progressPercentage}
-          faceDetected={faceDetected}
-        />
-      )}
+        
+        <div>
+          {/* Voice guidance system */}
+          <VoiceGuidance
+            enabled={voiceEnabled}
+            onEnabledChange={onVoiceEnabledChange}
+            currentInstruction={currentGuidance || undefined}
+            progress={progressPercentage}
+            onGenerateMockData={onCaptureAndAnalyze}
+            faceDetected={faceDetected}
+            lastActivity={lastActivity}
+            currentMakeupStep={getCurrentMakeupStep()}
+            detectedObjects={nearbyObjects}
+            movementData={movementData}
+            detectedMakeupTools={detectedMakeupTools}
+          />
+          
+          {/* Look progress tracker */}
+          <div className="mt-4">
+            <LookProgressTracker
+              currentStep={lookGuidance.currentStep}
+              completedSteps={lookGuidance.completedSteps}
+              totalSteps={lookGuidance.totalSteps}
+              stepNames={lookGuidance.stepNames}
+              onSelectStep={lookGuidance.selectStep}
+            />
+          </div>
+          
+          {/* Error display */}
+          {analysisError && (
+            <Alert variant="destructive" className="mt-4">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>{analysisError}</AlertDescription>
+            </Alert>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

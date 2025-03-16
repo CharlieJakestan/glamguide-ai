@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '@/components/Layout';
 import { useToast } from '@/hooks/use-toast';
@@ -14,6 +15,7 @@ import { useSetupStatus } from '@/hooks/useSetupStatus';
 import { useCamera } from '@/hooks/useCamera';
 import { useFaceDetection } from '@/hooks/useFaceDetection';
 import { useAnalysisSetup } from '@/hooks/useAnalysisSetup';
+import { useMakeupObjectDetection } from '@/hooks/useMakeupObjectDetection';
 import { Loader2 } from 'lucide-react';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
@@ -32,8 +34,10 @@ const GanGenerator = () => {
   const {
     faceDetectionReady, setFaceDetectionReady,
     faceDetected,
+    facePosition,
     movementData,
-    lastActivity
+    lastActivity,
+    detectionConfidence
   } = useFaceDetection({ 
     toast, 
     videoRef, 
@@ -51,6 +55,15 @@ const GanGenerator = () => {
     referenceLooks, setReferenceLooks,
     selectedLookId, setSelectedLookId
   } = useAnalysisSetup();
+  
+  const {
+    detectedObjects,
+    detectedMakeupTools
+  } = useMakeupObjectDetection({
+    videoRef,
+    facePosition,
+    enabled: cameraActive && faceDetected
+  });
   
   const lookGuidance = useReferenceLookGuidance({
     voiceEnabled,
@@ -307,6 +320,11 @@ const GanGenerator = () => {
               onToggleCamera={toggleCamera}
               videoRef={videoRef}
               canvasRef={canvasRef}
+              faceDetected={faceDetected}
+              movementData={movementData}
+              lastActivity={lastActivity}
+              nearbyObjects={detectedObjects}
+              detectedMakeupTools={detectedMakeupTools}
             />
           )}
           

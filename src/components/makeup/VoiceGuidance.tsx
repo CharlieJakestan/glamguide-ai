@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { getApiKey } from '@/services/speechService';
+import { getApiKey, speakInstruction } from '@/services/speechService';
 import { useToast } from '@/hooks/use-toast';
 import { DetectedObject } from '@/hooks/useMakeupObjectDetection';
 
@@ -48,6 +48,7 @@ const VoiceGuidance: React.FC<VoiceGuidanceProps> = ({
   const isSpeakingRef = useRef<boolean>(false);
   const lastInstructionTimeRef = useRef<number>(Date.now());
   const moveDetectionTimeout = useRef<NodeJS.Timeout | null>(null);
+  const [appliedSteps, setAppliedSteps] = useState<Set<string>>(new Set());
   
   // Check if we've been still for too long
   useEffect(() => {
@@ -133,6 +134,31 @@ const VoiceGuidance: React.FC<VoiceGuidanceProps> = ({
       window.speechSynthesis.speak(utterance);
     }
   };
+  
+  // Track which makeup steps have been completed
+  useEffect(() => {
+    if (detectedMakeupTools.length > 0 && enabled) {
+      const tool = detectedMakeupTools[0].type.toLowerCase();
+      
+      if (tool.includes('foundation') && !appliedSteps.has('foundation')) {
+        setAppliedSteps(prev => new Set(prev).add('foundation'));
+        const instruction = "I see you're using foundation. Apply in circular motions for even coverage.";
+        queueSpeech(instruction);
+      } else if (tool.includes('brush') && tool.includes('blush') && !appliedSteps.has('blush')) {
+        setAppliedSteps(prev => new Set(prev).add('blush'));
+        const instruction = "Great, you're using a blush brush. Apply to the apples of your cheeks and blend upward.";
+        queueSpeech(instruction);
+      } else if (tool.includes('lipstick') && !appliedSteps.has('lipstick')) {
+        setAppliedSteps(prev => new Set(prev).add('lipstick'));
+        const instruction = "I see you're applying lipstick. Start from the center and work your way outward.";
+        queueSpeech(instruction);
+      } else if (tool.includes('eyeshadow') && !appliedSteps.has('eyeshadow')) {
+        setAppliedSteps(prev => new Set(prev).add('eyeshadow'));
+        const instruction = "Now you're working on eyeshadow. Start with a light base color all over the lid.";
+        queueSpeech(instruction);
+      }
+    }
+  }, [detectedMakeupTools, enabled, appliedSteps]);
   
   // Dynamic instruction generation based on face detection and activity
   useEffect(() => {
@@ -335,6 +361,26 @@ const VoiceGuidance: React.FC<VoiceGuidanceProps> = ({
                   </Badge>
                 ))}
               </div>
+            </div>
+          )}
+          
+          {/* Applied steps tracking */}
+          {appliedSteps.size > 0 && (
+            <div className="mt-2 bg-indigo-50 p-2 rounded border border-indigo-100">
+              <div className="text-sm text-indigo-700 mb-1">
+                Makeup steps completed:
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {Array.from(appliedSteps).map((step, idx) => (
+                  <Badge key={idx} className="bg-indigo-100 text-indigo-700">
+                    {step}
+                  </Badge>
+                ))}
+              </div>
+              <Progress 
+                value={Math.min(appliedSteps.size * 20, 100)} 
+                className="h-1.5 mt-2"
+              />
             </div>
           )}
           
