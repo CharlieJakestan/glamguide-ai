@@ -11,7 +11,7 @@ const movementHistory: Array<{x: number, y: number, magnitude: number, timestamp
 const MAX_HISTORY_LENGTH = 30;
 
 // Initialize the face detection models
-export const initFaceDetection = async (): Promise<boolean> => {
+export const initFaceDetection = async (timeout?: number): Promise<boolean> => {
   if (modelsLoaded) return true;
   if (modelLoadingPromise) return modelLoadingPromise;
 
@@ -183,4 +183,120 @@ export const detectMakeupTools = async (
   }
   
   return []; // No tools detected
+};
+
+// Adding this function to fix the error in Camera.tsx
+export const applyVirtualMakeup = (
+  canvas: HTMLCanvasElement,
+  landmarks: faceapi.FaceLandmarks68,
+  makeupProducts: Array<{type: string, color: string, intensity: number}>
+) => {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  // This is a simplified implementation
+  // In a real implementation, you would apply different makeup effects based on the product type
+  makeupProducts.forEach(product => {
+    if (product.type === 'lipstick') {
+      applyLipstick(ctx, landmarks, product.color, product.intensity);
+    } else if (product.type === 'eyeshadow') {
+      applyEyeshadow(ctx, landmarks, product.color, product.intensity);
+    } else if (product.type === 'blush') {
+      applyBlush(ctx, landmarks, product.color, product.intensity);
+    }
+  });
+};
+
+// Helper functions for virtual makeup application
+const applyLipstick = (
+  ctx: CanvasRenderingContext2D,
+  landmarks: faceapi.FaceLandmarks68,
+  color: string,
+  intensity: number
+) => {
+  // Get lip landmarks
+  const lipPoints = landmarks.positions.slice(48, 60);
+  
+  // Draw lips
+  ctx.beginPath();
+  ctx.moveTo(lipPoints[0].x, lipPoints[0].y);
+  
+  for (let i = 1; i < lipPoints.length; i++) {
+    ctx.lineTo(lipPoints[i].x, lipPoints[i].y);
+  }
+  
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.globalAlpha = intensity / 100; // Adjust opacity based on intensity
+  ctx.fill();
+  ctx.globalAlpha = 1.0; // Reset opacity
+};
+
+const applyEyeshadow = (
+  ctx: CanvasRenderingContext2D,
+  landmarks: faceapi.FaceLandmarks68,
+  color: string,
+  intensity: number
+) => {
+  // Left eye
+  const leftEyePoints = landmarks.positions.slice(36, 42);
+  ctx.beginPath();
+  ctx.moveTo(leftEyePoints[0].x, leftEyePoints[0].y);
+  
+  for (let i = 1; i < leftEyePoints.length; i++) {
+    ctx.lineTo(leftEyePoints[i].x, leftEyePoints[i].y);
+  }
+  
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.globalAlpha = intensity / 100;
+  ctx.fill();
+  
+  // Right eye
+  const rightEyePoints = landmarks.positions.slice(42, 48);
+  ctx.beginPath();
+  ctx.moveTo(rightEyePoints[0].x, rightEyePoints[0].y);
+  
+  for (let i = 1; i < rightEyePoints.length; i++) {
+    ctx.lineTo(rightEyePoints[i].x, rightEyePoints[i].y);
+  }
+  
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.globalAlpha = 1.0; // Reset opacity
+};
+
+const applyBlush = (
+  ctx: CanvasRenderingContext2D,
+  landmarks: faceapi.FaceLandmarks68,
+  color: string,
+  intensity: number
+) => {
+  // Left cheek
+  const leftCheekCenter = {
+    x: (landmarks.positions[1].x + landmarks.positions[2].x) / 2,
+    y: (landmarks.positions[1].y + landmarks.positions[2].y) / 2
+  };
+  
+  // Right cheek
+  const rightCheekCenter = {
+    x: (landmarks.positions[15].x + landmarks.positions[16].x) / 2,
+    y: (landmarks.positions[15].y + landmarks.positions[16].y) / 2
+  };
+  
+  // Apply blush to both cheeks
+  const radius = landmarks.positions[16].x - landmarks.positions[0].x;
+  
+  ctx.beginPath();
+  ctx.arc(leftCheekCenter.x, leftCheekCenter.y, radius / 4, 0, 2 * Math.PI);
+  ctx.fillStyle = color;
+  ctx.globalAlpha = intensity / 100;
+  ctx.fill();
+  
+  ctx.beginPath();
+  ctx.arc(rightCheekCenter.x, rightCheekCenter.y, radius / 4, 0, 2 * Math.PI);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.globalAlpha = 1.0; // Reset opacity
 };
