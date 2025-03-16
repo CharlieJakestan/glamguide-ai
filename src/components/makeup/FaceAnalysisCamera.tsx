@@ -1,6 +1,6 @@
 
-import React, { useRef, useEffect, useState } from 'react';
-import { Loader2, Volume2, ChevronRight, ChevronLeft, CheckCircle, AlertTriangle } from 'lucide-react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { Loader2, Volume2, ChevronRight, ChevronLeft, CheckCircle, AlertTriangle, Camera, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import GanOutput from './GanOutput';
 import { Progress } from '@/components/ui/progress';
@@ -9,12 +9,15 @@ import LookDetailsPanel from './LookDetailsPanel';
 import { detectFacialLandmarks, getMovementTrends } from '@/lib/faceDetection';
 import FacialAnalysisDisplay from './FacialAnalysisDisplay';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import VoiceGuidance from './VoiceGuidance';
+import { DetectedObject } from '@/hooks/useMakeupObjectDetection';
 
-interface FaceAnalysisProps {
+interface FaceAnalysisCameraProps {
   cameraActive: boolean;
   isAnalyzing: boolean;
   progressPercentage: number;
-  currentGuidance: string;
+  currentGuidance: string | null;
   detectedFacialTraits: {
     skinTone: string;
     faceShape: string;
@@ -24,6 +27,7 @@ interface FaceAnalysisProps {
   analysisImage: string | null;
   analysisError: string | null;
   voiceEnabled: boolean;
+  onVoiceEnabledChange: (enabled: boolean) => void;
   availableLooks: any[];
   selectedLookId: string | null;
   onSelectLook: (lookId: string) => void;
@@ -42,9 +46,15 @@ interface FaceAnalysisProps {
   onToggleCamera: () => void;
   videoRef: React.RefObject<HTMLVideoElement>;
   canvasRef: React.RefObject<HTMLCanvasElement>;
+  faceDetected?: boolean;
+  onFaceDetectionChange?: (detected: boolean) => void;
+  movementData?: {x: number, y: number, magnitude: number};
+  lastActivity?: string | null;
+  nearbyObjects?: DetectedObject[];
+  detectedMakeupTools?: Array<{type: string, confidence: number}>;
 }
 
-const FaceAnalysisCamera: React.FC<FaceAnalysisProps> = ({
+const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
   cameraActive,
   isAnalyzing,
   progressPercentage,
@@ -53,6 +63,7 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisProps> = ({
   analysisImage,
   analysisError,
   voiceEnabled,
+  onVoiceEnabledChange,
   availableLooks,
   selectedLookId,
   onSelectLook,
@@ -60,209 +71,206 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisProps> = ({
   onCaptureAndAnalyze,
   onToggleCamera,
   videoRef,
-  canvasRef
+  canvasRef,
+  faceDetected = false,
+  onFaceDetectionChange,
+  movementData = { x: 0, y: 0, magnitude: 0 },
+  lastActivity = null,
+  nearbyObjects = [],
+  detectedMakeupTools = []
 }) => {
-  const [faceDetected, setFaceDetected] = useState(false);
-  const [movementData, setMovementData] = useState({ x: 0, y: 0, magnitude: 0 });
-  const [lastActivity, setLastActivity] = useState<string | null>(null);
-  const faceDetectionIntervalRef = useRef<number | null>(null);
-  const movementAnalysisIntervalRef = useRef<number | null>(null);
+  const [showGuidance, setShowGuidance] = useState(true);
+  const [overlayVisible, setOverlayVisible] = useState(true);
+  const [highlightedRegion, setHighlightedRegion] = useState<string | null>(null);
+  const canvasContextRef = useRef<CanvasRenderingContext2D | null>(null);
+  const cameraContainerRef = useRef<HTMLDivElement>(null);
   
   // Draw guide overlay on canvas for real-time feedback
-  const drawOverlay = (landmarks: any) => {
-    if (!canvasRef.current || !videoRef.current) return;
+  const drawOverlay = useCallback(() => {
+    if (!canvasRef.current || !videoRef.current || !canvasContextRef.current) return;
     
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const ctx = canvasContextRef.current;
     
     // Set canvas dimensions to match video
-    canvas.width = videoRef.current.videoWidth;
-    canvas.height = videoRef.current.videoHeight;
+    if (canvas.width !== videoRef.current.videoWidth || canvas.height !== videoRef.current.videoHeight) {
+      canvas.width = videoRef.current.videoWidth || 640;
+      canvas.height = videoRef.current.videoHeight || 480;
+    }
     
     // Clear previous drawings
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    if (!landmarks) return;
+    if (!faceDetected) return;
     
-    // Draw facial feature guides
+    // Add more dynamic and responsive overlays
     try {
-      // Draw jawline
+      // Face tracking circle
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const radius = Math.min(canvas.width, canvas.height) * 0.2;
+      
+      // Pulsing effect for tracking circle
+      const pulseScale = 1 + Math.sin(Date.now() * 0.003) * 0.05;
+      
+      // Draw face tracking indicator
       ctx.beginPath();
+      ctx.arc(centerX, centerY, radius * pulseScale, 0, Math.PI * 2);
       ctx.strokeStyle = 'rgba(200, 100, 255, 0.6)';
-      ctx.lineWidth = 3;
-      
-      // Draw points on jawline
-      const jawline = landmarks.getJawOutline();
-      ctx.moveTo(jawline[0].x, jawline[0].y);
-      jawline.forEach((point: {x: number, y: number}) => {
-        ctx.lineTo(point.x, point.y);
-      });
+      ctx.lineWidth = 2;
       ctx.stroke();
       
-      // Draw eyes
-      const leftEye = landmarks.getLeftEye();
-      const rightEye = landmarks.getRightEye();
-      
+      // Add crosshair lines
       ctx.beginPath();
-      ctx.strokeStyle = 'rgba(255, 100, 200, 0.6)';
-      ctx.moveTo(leftEye[0].x, leftEye[0].y);
-      leftEye.forEach((point: {x: number, y: number}) => {
-        ctx.lineTo(point.x, point.y);
-      });
-      ctx.closePath();
+      ctx.moveTo(centerX - radius * 1.2, centerY);
+      ctx.lineTo(centerX + radius * 1.2, centerY);
+      ctx.moveTo(centerX, centerY - radius * 1.2);
+      ctx.lineTo(centerX, centerY + radius * 1.2);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.lineWidth = 1;
       ctx.stroke();
       
-      ctx.beginPath();
-      ctx.moveTo(rightEye[0].x, rightEye[0].y);
-      rightEye.forEach((point: {x: number, y: number}) => {
-        ctx.lineTo(point.x, point.y);
-      });
-      ctx.closePath();
-      ctx.stroke();
+      // Draw highlighted regions based on current guidance
+      if (highlightedRegion) {
+        let regionX = centerX;
+        let regionY = centerY;
+        let regionRadius = radius * 0.4;
+        
+        switch (highlightedRegion.toLowerCase()) {
+          case 'eyes':
+            regionY = centerY - radius * 0.3;
+            break;
+          case 'lips':
+            regionY = centerY + radius * 0.5;
+            break;
+          case 'cheeks':
+            regionX = centerX + (Math.random() > 0.5 ? 1 : -1) * radius * 0.6;
+            regionY = centerY;
+            break;
+          case 'forehead':
+            regionY = centerY - radius * 0.7;
+            break;
+          case 'jawline':
+            regionY = centerY + radius * 0.7;
+            break;
+        }
+        
+        // Draw highlighted region with pulsing effect
+        const glowScale = 1 + Math.sin(Date.now() * 0.006) * 0.3;
+        
+        // Create gradient glow
+        const gradient = ctx.createRadialGradient(
+          regionX, regionY, 0,
+          regionX, regionY, regionRadius * glowScale
+        );
+        gradient.addColorStop(0, 'rgba(255, 100, 255, 0.4)');
+        gradient.addColorStop(1, 'rgba(255, 100, 255, 0)');
+        
+        ctx.beginPath();
+        ctx.arc(regionX, regionY, regionRadius * glowScale, 0, Math.PI * 2);
+        ctx.fillStyle = gradient;
+        ctx.fill();
+        
+        // Add label
+        ctx.font = '14px Arial';
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.fillText(highlightedRegion, regionX, regionY - regionRadius * 1.2);
+      }
       
-      // Draw lips
-      const mouth = landmarks.getMouth();
-      ctx.beginPath();
-      ctx.strokeStyle = 'rgba(255, 100, 100, 0.6)';
-      ctx.moveTo(mouth[0].x, mouth[0].y);
-      mouth.forEach((point: {x: number, y: number}) => {
-        ctx.lineTo(point.x, point.y);
-      });
-      ctx.closePath();
-      ctx.stroke();
+      // Draw makeup tool indicators if detected
+      if (nearbyObjects.length > 0) {
+        nearbyObjects.forEach(obj => {
+          // Normalize position to canvas coordinates
+          const normalizedX = obj.position.x / videoRef.current!.videoWidth * canvas.width;
+          const normalizedY = obj.position.y / videoRef.current!.videoHeight * canvas.height;
+          
+          // Draw object highlight
+          ctx.beginPath();
+          ctx.arc(normalizedX, normalizedY, 20, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(100, 200, 255, 0.3)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(100, 200, 255, 0.8)';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          
+          // Draw label
+          ctx.font = '12px Arial';
+          ctx.fillStyle = 'white';
+          ctx.textAlign = 'center';
+          ctx.fillText(obj.type, normalizedX, normalizedY - 25);
+          ctx.fillText(`${Math.round(obj.confidence * 100)}%`, normalizedX, normalizedY - 10);
+        });
+      }
       
-      // Draw guidance text
+      // Draw current guidance instruction
       if (lookGuidance.currentStep >= 0) {
         const instruction = lookGuidance.getCurrentInstruction();
         if (instruction) {
-          ctx.font = '16px Arial';
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-          ctx.fillRect(10, canvas.height - 60, canvas.width - 20, 50);
-          ctx.fillStyle = 'rgba(100, 50, 200, 1)';
-          ctx.fillText(instruction.instruction, 20, canvas.height - 35);
+          const textY = canvas.height - 40;
+          
+          // Create background for text
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+          ctx.fillRect(10, textY - 20, canvas.width - 20, 30);
+          
+          // Draw text
+          ctx.font = '14px Arial';
+          ctx.fillStyle = 'white';
+          ctx.textAlign = 'center';
+          ctx.fillText(
+            instruction.instruction.length > 60 
+              ? instruction.instruction.substring(0, 60) + '...' 
+              : instruction.instruction, 
+            canvas.width / 2, 
+            textY
+          );
         }
       }
     } catch (error) {
-      console.error('Error drawing facial landmarks:', error);
+      console.error('Error drawing canvas overlays:', error);
     }
-  };
+  }, [canvasRef, videoRef, faceDetected, highlightedRegion, nearbyObjects, lookGuidance]);
   
-  // Run face detection on an interval when camera is active
+  // Setup canvas context and animation loop
   useEffect(() => {
-    if (!cameraActive || !videoRef.current) {
-      setFaceDetected(false);
-      if (faceDetectionIntervalRef.current) {
-        window.clearInterval(faceDetectionIntervalRef.current);
-        faceDetectionIntervalRef.current = null;
-      }
-      if (movementAnalysisIntervalRef.current) {
-        window.clearInterval(movementAnalysisIntervalRef.current);
-        movementAnalysisIntervalRef.current = null;
-      }
-      return;
+    if (!canvasRef.current) return;
+    
+    canvasContextRef.current = canvasRef.current.getContext('2d');
+    
+    let animationFrameId: number;
+    
+    // Animation loop for smooth canvas rendering
+    const animate = () => {
+      drawOverlay();
+      animationFrameId = requestAnimationFrame(animate);
+    };
+    
+    if (cameraActive) {
+      animate();
     }
-    
-    // Set up interval for face detection
-    faceDetectionIntervalRef.current = window.setInterval(async () => {
-      if (videoRef.current) {
-        try {
-          const detection = await detectFacialLandmarks(videoRef.current);
-          const wasDetected = !!detection;
-          setFaceDetected(wasDetected);
-          
-          // Draw guide overlay if face is detected
-          if (wasDetected && detection) {
-            drawOverlay(detection.landmarks);
-            
-            // Detect makeup activities
-            detectMakeupActivities(detection);
-          } else if (canvasRef.current) {
-            // Clear canvas if no face detected
-            const ctx = canvasRef.current.getContext('2d');
-            if (ctx) {
-              ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-            }
-          }
-        } catch (error) {
-          console.error('Face detection error:', error);
-        }
-      }
-    }, 200);
-    
-    // Set up interval for movement analysis
-    movementAnalysisIntervalRef.current = window.setInterval(() => {
-      const trends = getMovementTrends();
-      setMovementData(trends);
-      
-      // Log significant movements for AI learning
-      if (trends.magnitude > 5) {
-        console.log('Significant movement detected:', trends);
-        
-        // Detect activities based on movement
-        if (Math.abs(trends.x) > Math.abs(trends.y)) {
-          setLastActivity(trends.x > 0 ? "Looking right" : "Looking left");
-        } else {
-          setLastActivity(trends.y > 0 ? "Looking down" : "Looking up");
-        }
-      }
-    }, 1000);
     
     return () => {
-      if (faceDetectionIntervalRef.current) {
-        window.clearInterval(faceDetectionIntervalRef.current);
-        faceDetectionIntervalRef.current = null;
-      }
-      if (movementAnalysisIntervalRef.current) {
-        window.clearInterval(movementAnalysisIntervalRef.current);
-        movementAnalysisIntervalRef.current = null;
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [cameraActive, videoRef, canvasRef, lookGuidance]);
+  }, [canvasRef, cameraActive, drawOverlay]);
   
-  // Simulate detecting makeup activities (would be replaced with real AI object detection)
-  const detectMakeupActivities = (detection: any) => {
-    // This is a simulation - in a real system, we'd use AI to detect actual makeup activities
-    const currentStep = lookGuidance.currentStep;
-    const stepName = lookGuidance.stepNames[currentStep] || '';
+  // Update highlighted region based on guidance
+  useEffect(() => {
+    if (!currentGuidance) return;
     
-    // Random chance to detect an activity related to current step
-    if (Math.random() < 0.05) {
-      const activities = [
-        "Applying foundation",
-        "Blending concealer",
-        "Using eyeshadow brush",
-        "Applying lipstick",
-        "Blending blush",
-        "Curling eyelashes",
-        "Adding highlighter"
-      ];
-      
-      let detectedActivity = activities[Math.floor(Math.random() * activities.length)];
-      
-      // Try to match with current step
-      if (stepName.toLowerCase().includes('foundation') && detectedActivity.includes('foundation')) {
-        detectedActivity += " correctly";
-      } else if (stepName.toLowerCase().includes('lip') && detectedActivity.includes('lipstick')) {
-        detectedActivity += " correctly";
-      } else if (stepName.toLowerCase().includes('eye') && 
-                (detectedActivity.includes('eyeshadow') || detectedActivity.includes('eyelash'))) {
-        detectedActivity += " correctly";
-      } else if (stepName.toLowerCase().includes('blush') && detectedActivity.includes('blush')) {
-        detectedActivity += " correctly";
-      }
-      
-      setLastActivity(detectedActivity);
-      
-      // Clear after a few seconds
-      setTimeout(() => {
-        setLastActivity(null);
-      }, 3000);
-    }
-  };
-  
-  // Get current step instruction
-  const currentInstruction = lookGuidance.getCurrentInstruction();
+    const guidance = currentGuidance.toLowerCase();
+    
+    if (guidance.includes('eye')) setHighlightedRegion('eyes');
+    else if (guidance.includes('lip')) setHighlightedRegion('lips');
+    else if (guidance.includes('cheek') || guidance.includes('blush')) setHighlightedRegion('cheeks');
+    else if (guidance.includes('forehead')) setHighlightedRegion('forehead');
+    else if (guidance.includes('jaw')) setHighlightedRegion('jawline');
+    else if (guidance.includes('foundation') || guidance.includes('face')) setHighlightedRegion('face');
+    else setHighlightedRegion(null);
+    
+  }, [currentGuidance]);
   
   // Make canvas visible for real-time overlay
   useEffect(() => {
@@ -276,11 +284,19 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisProps> = ({
     }
   }, [canvasRef, videoRef, cameraActive]);
   
+  // Get current step instruction
+  const currentInstruction = lookGuidance.getCurrentInstruction();
+  
+  // Toggle overlay visibility
+  const toggleOverlay = () => {
+    setOverlayVisible(prev => !prev);
+  };
+  
   return (
     <div className="space-y-4 mb-6">
       <div className="flex flex-col md:flex-row gap-4">
         <div className="w-full md:w-3/5">
-          <div className="relative bg-black rounded-lg overflow-hidden">
+          <div className="relative bg-black rounded-lg overflow-hidden" ref={cameraContainerRef}>
             <video 
               ref={videoRef}
               autoPlay 
@@ -289,8 +305,18 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisProps> = ({
             />
             <canvas 
               ref={canvasRef} 
-              className="absolute top-0 left-0 w-full h-full pointer-events-none z-10" 
+              className={`absolute top-0 left-0 w-full h-full pointer-events-none z-10 ${overlayVisible ? 'opacity-100' : 'opacity-30'}`}
             />
+            
+            {/* Toggle overlay button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleOverlay}
+              className="absolute top-2 right-2 bg-black/30 text-white z-20 hover:bg-black/50"
+            >
+              {overlayVisible ? 'Hide Overlay' : 'Show Overlay'}
+            </Button>
             
             {isAnalyzing && (
               <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 z-20">
@@ -304,8 +330,32 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisProps> = ({
             {!faceDetected && cameraActive && !isAnalyzing && (
               <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 z-20">
                 <div className="text-white text-center bg-red-900/70 p-4 rounded-lg max-w-xs">
+                  <AlertTriangle className="h-6 w-6 mx-auto mb-2" />
                   <p>No face detected. Please position your face in the frame.</p>
                 </div>
+              </div>
+            )}
+            
+            {/* Real-time detected objects overlay */}
+            {nearbyObjects.length > 0 && (
+              <div className="absolute top-12 left-2 right-2 bg-blue-900/70 text-white text-sm p-2 rounded z-20 animate-pulse">
+                <div className="flex items-center">
+                  <Zap className="h-4 w-4 mr-2 text-yellow-300" />
+                  <span>
+                    Detected: {nearbyObjects[0].type} 
+                    ({Math.round(nearbyObjects[0].confidence * 100)}% confidence)
+                  </span>
+                </div>
+              </div>
+            )}
+            
+            {/* Activity indicator */}
+            {lastActivity && (
+              <div className="absolute bottom-12 left-2 right-2 bg-purple-900/70 text-white text-sm p-2 rounded-md z-20">
+                <p className="flex items-center">
+                  <Activity className="h-4 w-4 mr-2 text-purple-300" />
+                  {lastActivity}
+                </p>
               </div>
             )}
             
@@ -316,23 +366,6 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisProps> = ({
                 className="rounded-none"
               />
             </div>
-            
-            {/* Activity feedback overlay */}
-            {lastActivity && faceDetected && (
-              <div className="absolute top-2 left-2 right-2 bg-purple-900/70 text-white text-sm p-2 rounded z-20">
-                <div className="flex items-center">
-                  <AlertTriangle className="h-4 w-4 mr-2 text-yellow-300" />
-                  <span>AI detected: {lastActivity}</span>
-                </div>
-              </div>
-            )}
-            
-            {/* Movement debugging overlay */}
-            {faceDetected && movementData.magnitude > 0 && (
-              <div className="absolute top-12 right-2 bg-black/50 text-white text-xs p-1 rounded z-20">
-                Movement: {movementData.magnitude.toFixed(1)}
-              </div>
-            )}
           </div>
           
           {/* Step navigation controls */}
@@ -380,7 +413,9 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisProps> = ({
               >
                 {isAnalyzing ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : null}
+                ) : (
+                  <Camera className="h-4 w-4 mr-2" />
+                )}
                 {isAnalyzing ? "Analyzing..." : "Analyze Facial Features"}
               </Button>
             </div>
@@ -388,8 +423,24 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisProps> = ({
         </div>
         
         <div className="w-full md:w-2/5">
+          {/* Enhanced voice guidance with more data */}
+          {showGuidance && (
+            <VoiceGuidance
+              enabled={voiceEnabled}
+              onEnabledChange={onVoiceEnabledChange}
+              currentInstruction={currentInstruction?.instruction}
+              progress={progressPercentage}
+              faceDetected={faceDetected}
+              lastActivity={lastActivity}
+              currentMakeupStep={lookGuidance.stepNames[lookGuidance.currentStep] || ""}
+              detectedObjects={nearbyObjects}
+              movementData={movementData}
+              detectedMakeupTools={detectedMakeupTools}
+            />
+          )}
+          
           {selectedLookId && availableLooks.length > 0 && (
-            <div className="h-full">
+            <div className="mt-4">
               {/* Step progress tracker */}
               <LookProgressTracker 
                 currentStep={lookGuidance.currentStep}
@@ -419,10 +470,22 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisProps> = ({
                 <Alert className="mt-2 bg-yellow-50 border-yellow-200">
                   <AlertTriangle className="h-4 w-4 text-yellow-500" />
                   <AlertDescription className="text-yellow-700 text-sm">
-                    I noticed you're {lastActivity.toLowerCase()}. 
+                    {lastActivity.includes("Detected") 
+                      ? `I noticed you're using ${lastActivity.replace("Detected ", "").toLowerCase()}.` 
+                      : `I observed: ${lastActivity}`}
                     {lastActivity.includes("correctly") 
                       ? " Great job! Continue with this technique." 
                       : ` Make sure to follow the current step: ${currentInstruction.instruction}`}
+                  </AlertDescription>
+                </Alert>
+              )}
+              
+              {/* Movement guidance */}
+              {movementData && movementData.magnitude > 5 && (
+                <Alert className="mt-2 bg-blue-50 border-blue-200">
+                  <Info className="h-4 w-4 text-blue-500" />
+                  <AlertDescription className="text-blue-700 text-sm">
+                    I notice you're moving quite a bit. For more precise makeup application, try to keep your head relatively still.
                   </AlertDescription>
                 </Alert>
               )}
@@ -431,7 +494,7 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisProps> = ({
         </div>
       )}
       
-      {/* Enhanced Facial Analysis Display */}
+      {/* Enhanced Facial Analysis Display with more data */}
       {detectedFacialTraits && (
         <FacialAnalysisDisplay
           detectedFacialTraits={detectedFacialTraits}
@@ -439,6 +502,10 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisProps> = ({
           analysisImage={analysisImage}
           movementData={movementData}
           lastActivity={lastActivity || undefined}
+          onReanalyze={onCaptureAndAnalyze}
+          nearbyObjects={nearbyObjects}
+          faceDetectionConfidence={faceDetected ? 0.8 : 0}
+          detectedMakeupTools={detectedMakeupTools}
         />
       )}
       
@@ -452,13 +519,17 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisProps> = ({
         </div>
       )}
       
-      {/* Generated Look Display */}
+      {/* Enhanced GAN Output with more visual feedback */}
       {analysisImage && !detectedFacialTraits && (
         <GanOutput
           imageUrl={analysisImage}
           isLoading={isAnalyzing}
           error={analysisError || undefined}
           className="w-full h-64"
+          facialAnalysis={detectedFacialTraits ?? undefined}
+          onRegenerate={onCaptureAndAnalyze}
+          progressPercentage={progressPercentage}
+          faceDetected={faceDetected}
         />
       )}
     </div>

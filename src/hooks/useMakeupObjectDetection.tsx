@@ -13,13 +13,15 @@ interface UseMakeupObjectDetectionProps {
   enabled: boolean;
   faceDetected: boolean;
   currentStep?: string;
+  onObjectDetected?: (object: DetectedObject) => void;
 }
 
 export const useMakeupObjectDetection = ({
   videoRef,
   enabled,
   faceDetected,
-  currentStep = ''
+  currentStep = '',
+  onObjectDetected
 }: UseMakeupObjectDetectionProps) => {
   const [detectedObjects, setDetectedObjects] = useState<DetectedObject[]>([]);
   const [lastDetectedObject, setLastDetectedObject] = useState<DetectedObject | null>(null);
@@ -29,6 +31,7 @@ export const useMakeupObjectDetection = ({
   const detectionIntervalRef = useRef<number | null>(null);
   const lastDetectionTime = useRef(0);
   const detectionHistoryRef = useRef<Map<string, number>>(new Map());
+  const objectDetectionConfidence = useRef<Map<string, number>>(new Map());
   
   // Clear old objects from history 
   const cleanupHistory = useCallback(() => {
@@ -38,6 +41,7 @@ export const useMakeupObjectDetection = ({
     for (const [type, timestamp] of detectionHistoryRef.current.entries()) {
       if (now - timestamp > MAX_AGE) {
         detectionHistoryRef.current.delete(type);
+        objectDetectionConfidence.current.delete(type);
       }
     }
   }, []);
@@ -71,13 +75,13 @@ export const useMakeupObjectDetection = ({
     return false;
   }, []);
   
-  // Run detection logic
+  // Run detection logic with enhanced confidence tracking
   const runDetection = useCallback(async () => {
     if (!videoRef.current || !enabled || !faceDetected || isProcessing) return;
     
     const now = Date.now();
-    // Limit detection frequency
-    if (now - lastDetectionTime.current < 1000) return;
+    // Increase detection frequency for more responsive feedback
+    if (now - lastDetectionTime.current < 500) return;
     
     try {
       setIsProcessing(true);
@@ -88,24 +92,39 @@ export const useMakeupObjectDetection = ({
       if (objects.length > 0) {
         setDetectedObjects(objects);
         
-        // Update detection history
+        // Update detection history and confidence
         objects.forEach(obj => {
+          const prevConfidence = objectDetectionConfidence.current.get(obj.type) || 0;
+          const updatedConfidence = Math.min(prevConfidence + 0.2, 1.0); // Increase confidence with repeated detections
+          
           detectionHistoryRef.current.set(obj.type, now);
+          objectDetectionConfidence.current.set(obj.type, updatedConfidence);
+          
+          // Only consider high confidence detections for UI feedback
+          if (updatedConfidence > 0.5) {
+            console.log(`High confidence detection: ${obj.type} (${updatedConfidence.toFixed(2)})`);
+          }
         });
         
-        // Set last detected object
-        const highestConfidence = objects.reduce((prev, current) => 
+        // Find the object with highest confidence
+        const highestConfidenceObj = objects.reduce((prev, current) => 
           (prev.confidence > current.confidence) ? prev : current
         );
         
-        setLastDetectedObject(highestConfidence);
+        // Update last detected object
+        setLastDetectedObject(highestConfidenceObj);
+        
+        // Notify parent component
+        if (onObjectDetected) {
+          onObjectDetected(highestConfidenceObj);
+        }
         
         // Check if object is relevant to current step
         if (currentStep) {
-          const isRelevant = checkRelevance(highestConfidence.type, currentStep);
+          const isRelevant = checkRelevance(highestConfidenceObj.type, currentStep);
           setRelevantToStep(isRelevant);
           
-          console.log(`Detected ${highestConfidence.type} - Relevant to step "${currentStep}": ${isRelevant}`);
+          console.log(`Detected ${highestConfidenceObj.type} - Relevant to step "${currentStep}": ${isRelevant}`);
         }
       }
       
@@ -116,9 +135,9 @@ export const useMakeupObjectDetection = ({
     } finally {
       setIsProcessing(false);
     }
-  }, [videoRef, enabled, faceDetected, isProcessing, currentStep, checkRelevance, cleanupHistory]);
+  }, [videoRef, enabled, faceDetected, isProcessing, currentStep, checkRelevance, cleanupHistory, onObjectDetected]);
   
-  // Set up detection interval
+  // Set up detection interval with higher frequency
   useEffect(() => {
     if (!enabled || !videoRef.current) {
       if (detectionIntervalRef.current) {
@@ -128,8 +147,8 @@ export const useMakeupObjectDetection = ({
       return;
     }
     
-    // Run detection every 2 seconds
-    detectionIntervalRef.current = window.setInterval(runDetection, 2000);
+    // Run detection more frequently for better responsiveness
+    detectionIntervalRef.current = window.setInterval(runDetection, 1000);
     
     return () => {
       if (detectionIntervalRef.current) {
@@ -139,11 +158,14 @@ export const useMakeupObjectDetection = ({
     };
   }, [enabled, videoRef, runDetection]);
   
-  // Get recent detection history
+  // Get recent detection history with confidence levels
   const getRecentDetections = () => {
     return Array.from(detectionHistoryRef.current.entries())
       .sort((a, b) => b[1] - a[1]) // Sort by most recent
-      .map(([type]) => type);
+      .map(([type]) => ({
+        type,
+        confidence: objectDetectionConfidence.current.get(type) || 0
+      }));
   };
   
   return {

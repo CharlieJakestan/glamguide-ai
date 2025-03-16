@@ -1,246 +1,191 @@
 
 import React, { useState, useEffect } from 'react';
-import { Sparkles, AlertCircle, Download, Share2, Loader2, Check, Info } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Loader2, AlertCircle, Check, Info, RefreshCw } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
 
 interface GanOutputProps {
-  imageUrl?: string;
-  isLoading?: boolean;
+  imageUrl: string | null;
+  isLoading: boolean;
   error?: string;
   className?: string;
-  onShare?: () => void;
-  onDownload?: () => void;
-  detectedFacialTraits?: {
-    skinTone: string;
-    faceShape: string;
-  } | null;
+  facialAnalysis?: {
+    skinTone?: string;
+    faceShape?: string;
+    features?: string[];
+  };
+  onRegenerate?: () => void;
+  progressPercentage?: number;
+  faceDetected?: boolean;
 }
 
-const GanOutput: React.FC<GanOutputProps> = ({ 
-  imageUrl, 
-  isLoading = false,
+const GanOutput: React.FC<GanOutputProps> = ({
+  imageUrl,
+  isLoading,
   error,
-  className = "",
-  onShare,
-  onDownload,
-  detectedFacialTraits
+  className = '',
+  facialAnalysis,
+  onRegenerate,
+  progressPercentage = 0,
+  faceDetected = false
 }) => {
-  const [downloadSuccess, setDownloadSuccess] = useState(false);
-  const [shareSuccess, setShareSuccess] = useState(false);
-  const [aiInsights, setAiInsights] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [fadeIn, setFadeIn] = useState(false);
+  const [animatedProgress, setAnimatedProgress] = useState(0);
   
+  // Reset state when a new image is loading
   useEffect(() => {
-    // Generate AI insights based on facial traits
-    if (detectedFacialTraits && imageUrl) {
-      let insight = "";
-      
-      switch (detectedFacialTraits.skinTone.toLowerCase()) {
-        case 'fair':
-        case 'light':
-          insight = "The AI has enhanced your light skin tone with soft, neutral colors that complement your complexion.";
-          break;
-        case 'medium':
-        case 'olive':
-          insight = "The AI has adapted warm tones to enhance your medium/olive skin tone, bringing out your natural warmth.";
-          break;
-        case 'tan':
-        case 'deep':
-          insight = "The AI has selected rich, vibrant colors that beautifully complement your deeper skin tone.";
-          break;
-        default:
-          insight = "The AI has customized this look based on your unique skin tone and facial features.";
-      }
-      
-      // Add face shape insights
-      if (detectedFacialTraits.faceShape) {
-        switch (detectedFacialTraits.faceShape.toLowerCase()) {
-          case 'oval':
-            insight += " Your oval face shape works with virtually any makeup style.";
-            break;
-          case 'round':
-            insight += " The AI has added contour to enhance your round face shape.";
-            break;
-          case 'square':
-            insight += " The AI has softened angles to complement your square face shape.";
-            break;
-          case 'heart':
-            insight += " The AI has balanced your heart-shaped face with appropriate highlighting.";
-            break;
-          default:
-            insight += " The look is tailored to your unique face shape.";
-        }
-      }
-      
-      setAiInsights(insight);
+    if (isLoading) {
+      setLoaded(false);
+      setFadeIn(false);
+      setAnimatedProgress(0);
     }
-  }, [detectedFacialTraits, imageUrl]);
-
-  const handleDownload = () => {
-    if (!imageUrl) return;
-    
-    if (onDownload) {
-      onDownload();
-    } else {
-      // Default download behavior
-      const link = document.createElement('a');
-      link.href = imageUrl;
-      link.download = 'makeup-look.png';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+  }, [isLoading]);
+  
+  // Animate progress bar for better UX
+  useEffect(() => {
+    if (isLoading && animatedProgress < 95) {
+      const timer = setTimeout(() => {
+        setAnimatedProgress(prev => Math.min(prev + 5, 95));
+      }, 200);
+      return () => clearTimeout(timer);
+    } else if (!isLoading && animatedProgress < 100) {
+      setAnimatedProgress(100);
     }
-    
-    // Show success indicator
-    setDownloadSuccess(true);
-    setTimeout(() => setDownloadSuccess(false), 2000);
+  }, [isLoading, animatedProgress]);
+  
+  // Trigger fade-in animation once image loads
+  useEffect(() => {
+    if (loaded && !fadeIn) {
+      const timer = setTimeout(() => {
+        setFadeIn(true);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [loaded, fadeIn]);
+  
+  // Use actual progress if provided, otherwise use animated progress
+  const displayProgress = progressPercentage > 0 ? progressPercentage : animatedProgress;
+  
+  const handleImageLoad = () => {
+    setLoaded(true);
   };
   
-  const handleShare = () => {
-    if (!imageUrl) return;
-    
-    if (onShare) {
-      onShare();
-    } else if (navigator.share) {
-      // Web Share API if available
-      navigator.share({
-        title: 'My AI Makeup Look',
-        text: 'Check out this makeup look created just for me with AI!',
-        url: imageUrl
-      }).catch(err => console.error('Error sharing:', err));
-    }
-    
-    // Show success indicator
-    setShareSuccess(true);
-    setTimeout(() => setShareSuccess(false), 2000);
-  };
+  if (error) {
+    return (
+      <div className={`bg-red-50 rounded-lg p-4 border border-red-200 ${className}`}>
+        <div className="flex items-start">
+          <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 mr-2" />
+          <div>
+            <h3 className="text-red-800 font-medium">Analysis Error</h3>
+            <p className="text-red-700 text-sm mt-1">{error}</p>
+            
+            {onRegenerate && (
+              <button 
+                onClick={onRegenerate} 
+                className="mt-3 text-xs bg-white text-red-600 hover:bg-red-50 rounded px-3 py-1 border border-red-200 flex items-center"
+              >
+                <RefreshCw className="h-3 w-3 mr-1" /> Try Again
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
   
   return (
-    <div className="relative rounded-lg overflow-hidden bg-gray-100 shadow-md border border-gray-200 group p-0 m-0">
-      {/* Main content area with image or placeholder */}
-      <div className={`relative flex items-center justify-center overflow-hidden ${className}`}>
-        {isLoading && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-50 text-white z-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white mb-2"></div>
-            <p className="text-sm">Generating your personalized look...</p>
-            <p className="text-xs mt-2 max-w-xs text-center text-gray-300">
-              AI is analyzing your facial features and creating a custom makeup look
+    <div className={`relative bg-gray-100 rounded-lg overflow-hidden ${className}`}>
+      {/* Progress bar overlay */}
+      {(isLoading || !loaded) && (
+        <div className="absolute inset-0 bg-gray-200/60 backdrop-blur-sm flex flex-col items-center justify-center z-10">
+          <Loader2 className="h-8 w-8 text-purple-600 animate-spin mb-2" />
+          <p className="text-sm text-purple-700 font-medium">
+            {isLoading ? 'Analyzing your face...' : 'Loading results...'}
+          </p>
+          <div className="w-3/4 mt-3">
+            <Progress value={displayProgress} className="h-2" />
+            <p className="text-xs text-gray-600 text-center mt-1">
+              {Math.round(displayProgress)}%
             </p>
-          </div>
-        )}
-        
-        {error && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-900 bg-opacity-40 text-white p-4 z-20">
-            <AlertCircle className="h-8 w-8 mb-2" />
-            <p className="text-center">{error}</p>
-            <Button 
-              variant="outline"
-              size="sm"
-              className="mt-4 bg-white/20 text-white hover:bg-white/30 border-white/30"
-              onClick={() => window.location.reload()}
-            >
-              Retry
-            </Button>
-          </div>
-        )}
-        
-        {imageUrl ? (
-          <>
-            <img 
-              src={imageUrl} 
-              alt="AI Generated Makeup Look" 
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-          </>
-        ) : !isLoading && !error ? (
-          <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-            <Sparkles className="h-10 w-10 text-pink-300 mb-4 animate-pulse" />
-            <p className="text-gray-500">Your AI-generated makeup look will appear here</p>
-            <p className="text-xs text-gray-400 mt-2">
-              The AI will analyze your face and create a personalized makeup look
-            </p>
-          </div>
-        ) : null}
-      </div>
-      
-      {/* AI insights panel */}
-      {imageUrl && aiInsights && !error && !isLoading && (
-        <div className="px-4 py-3 bg-indigo-50 border-t border-indigo-100">
-          <div className="flex items-start">
-            <Info className="h-4 w-4 text-indigo-600 mt-0.5 mr-2 flex-shrink-0" />
-            <p className="text-sm text-indigo-700">{aiInsights}</p>
           </div>
         </div>
       )}
       
-      {/* Overlay actions on hover */}
-      {imageUrl && !error && !isLoading && (
-        <div className="absolute bottom-0 left-0 right-0 p-3 flex justify-center gap-2 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  className="bg-white/90 hover:bg-white text-gray-800 border-none"
-                  onClick={handleDownload}
-                >
-                  {downloadSuccess ? (
-                    <Check className="h-4 w-4 mr-1 text-green-500" />
-                  ) : (
-                    <Download className="h-4 w-4 mr-1" />
-                  )}
-                  {downloadSuccess ? "Saved" : "Save"}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Download this look</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+      {/* Image container */}
+      {imageUrl && (
+        <div 
+          className={`w-full h-full transition-opacity duration-300 ${fadeIn ? 'opacity-100' : 'opacity-0'}`}
+        >
+          <img
+            src={imageUrl}
+            alt="GAN output"
+            className="w-full h-full object-cover"
+            onLoad={handleImageLoad}
+          />
           
-          {navigator.share && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    className="bg-white/90 hover:bg-white text-gray-800 border-none"
-                    onClick={handleShare}
+          {/* Face detection indicator */}
+          {!isLoading && loaded && (
+            <div className="absolute bottom-2 left-2 right-2 pointer-events-none">
+              <div className="bg-black/40 backdrop-blur-sm text-white text-xs rounded px-2 py-1 flex items-center justify-between">
+                <div className="flex items-center">
+                  {faceDetected ? (
+                    <Check className="h-3 w-3 text-green-400 mr-1" />
+                  ) : (
+                    <AlertCircle className="h-3 w-3 text-yellow-400 mr-1" />
+                  )}
+                  <span>Face {faceDetected ? 'detected' : 'not detected'}</span>
+                </div>
+                
+                {/* Regenerate button */}
+                {onRegenerate && (
+                  <button 
+                    onClick={onRegenerate}
+                    className="bg-white/20 hover:bg-white/30 text-white rounded-full p-1 ml-2 pointer-events-auto"
                   >
-                    {shareSuccess ? (
-                      <Check className="h-4 w-4 mr-1 text-green-500" />
-                    ) : (
-                      <Share2 className="h-4 w-4 mr-1" />
-                    )}
-                    {shareSuccess ? "Shared" : "Share"}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Share this look</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+                    <RefreshCw className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          
+          {/* Display facial analysis if available */}
+          {facialAnalysis && loaded && !isLoading && (
+            <div className="absolute top-2 right-2 left-2 pointer-events-none">
+              <div className="bg-black/40 backdrop-blur-sm rounded p-2 flex flex-wrap gap-1">
+                {facialAnalysis.skinTone && (
+                  <Badge className="bg-purple-500/80 text-white">
+                    {facialAnalysis.skinTone}
+                  </Badge>
+                )}
+                {facialAnalysis.faceShape && (
+                  <Badge className="bg-pink-500/80 text-white">
+                    {facialAnalysis.faceShape}
+                  </Badge>
+                )}
+                {facialAnalysis.features && facialAnalysis.features.slice(0, 2).map((feature, idx) => (
+                  <Badge key={idx} className="bg-indigo-500/80 text-white">
+                    {feature}
+                  </Badge>
+                ))}
+                {(facialAnalysis.features?.length || 0) > 2 && (
+                  <Badge className="bg-blue-500/80 text-white flex items-center">
+                    <Info className="h-3 w-3 mr-1" />
+                    {(facialAnalysis.features?.length || 0) - 2} more
+                  </Badge>
+                )}
+              </div>
+            </div>
           )}
         </div>
       )}
       
-      {/* AI generated badge */}
-      {imageUrl && (
-        <div className="absolute top-2 right-2 bg-purple-900/80 text-white text-xs px-2 py-1 rounded-full flex items-center">
-          <Sparkles className="h-3 w-3 mr-1" />
-          AI Generated
-        </div>
-      )}
-      
-      {/* Processing indicator */}
-      {imageUrl && !error && !isLoading && (
-        <div className="absolute top-2 left-2 bg-green-700/80 text-white text-xs px-2 py-1 rounded-full flex items-center">
-          <Check className="h-3 w-3 mr-1" />
-          Personalized
+      {/* Empty state */}
+      {!imageUrl && !isLoading && (
+        <div className="w-full h-full flex items-center justify-center">
+          <p className="text-gray-500">No image generated yet</p>
         </div>
       )}
     </div>
