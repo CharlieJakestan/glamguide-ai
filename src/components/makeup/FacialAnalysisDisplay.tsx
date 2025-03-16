@@ -1,6 +1,9 @@
 
-import React from 'react';
-import { Volume2 } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Volume2, Info, Camera } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface FacialAnalysisDisplayProps {
   detectedFacialTraits: {
@@ -11,17 +14,28 @@ interface FacialAnalysisDisplayProps {
   } | null;
   voiceEnabled: boolean;
   analysisImage: string | null;
+  movementData?: { x: number; y: number; magnitude: number };
+  lastActivity?: string;
 }
 
 const FacialAnalysisDisplay: React.FC<FacialAnalysisDisplayProps> = ({
   detectedFacialTraits,
   voiceEnabled,
-  analysisImage
+  analysisImage,
+  movementData,
+  lastActivity
 }) => {
+  useEffect(() => {
+    // Log active analysis to confirm component is receiving data
+    if (detectedFacialTraits) {
+      console.log('Facial analysis data received:', detectedFacialTraits);
+    }
+  }, [detectedFacialTraits]);
+
   if (!detectedFacialTraits) return null;
   
   return (
-    <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-5 rounded-lg border border-purple-200 shadow-sm mb-6">
+    <Card className="bg-gradient-to-r from-purple-50 to-pink-50 p-5 rounded-lg border border-purple-200 shadow-sm mb-6 overflow-hidden">
       <div className="flex flex-col md:flex-row gap-6">
         {analysisImage && (
           <div className="w-full md:w-1/3">
@@ -31,10 +45,28 @@ const FacialAnalysisDisplay: React.FC<FacialAnalysisDisplayProps> = ({
                 alt="Analyzed face" 
                 className="w-full h-auto object-cover"
               />
-              <div className="absolute top-2 right-2 bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded-full">
+              <Badge className="absolute top-2 right-2 bg-purple-100 text-purple-700">
                 AI Analysis
-              </div>
+              </Badge>
             </div>
+            
+            {movementData && movementData.magnitude > 0 && (
+              <div className="mt-2 text-xs text-purple-700 bg-purple-50 p-2 rounded-md">
+                <div className="font-medium mb-1">Movement Analysis:</div>
+                <div>Magnitude: {movementData.magnitude.toFixed(1)}</div>
+                <div>Direction: {Math.abs(movementData.x) > Math.abs(movementData.y) 
+                  ? (movementData.x > 0 ? 'Right' : 'Left') 
+                  : (movementData.y > 0 ? 'Down' : 'Up')}
+                </div>
+              </div>
+            )}
+            
+            {lastActivity && (
+              <div className="mt-2 text-xs text-green-700 bg-green-50 p-2 rounded-md">
+                <div className="font-medium">Detected Activity:</div>
+                <div>{lastActivity}</div>
+              </div>
+            )}
           </div>
         )}
         
@@ -54,7 +86,19 @@ const FacialAnalysisDisplay: React.FC<FacialAnalysisDisplayProps> = ({
                 </div>
                 <div className="flex items-center">
                   <span className="text-purple-900 font-medium w-24">Face Shape:</span>
-                  <span className="text-purple-800">{detectedFacialTraits.faceShape}</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center">
+                          <span className="text-purple-800">{detectedFacialTraits.faceShape}</span>
+                          <Info className="ml-1 h-3 w-3 text-purple-400" />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-sm">Face shape affects makeup application techniques</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
               </div>
               
@@ -80,11 +124,18 @@ const FacialAnalysisDisplay: React.FC<FacialAnalysisDisplayProps> = ({
           </div>
           
           <div className="mt-4 text-sm text-purple-600 italic">
-            These analysis results will be used to personalize your makeup guidance.
+            These analysis results are dynamically updated as you apply makeup.
+          </div>
+          
+          <div className="mt-3 flex justify-end">
+            <button className="text-sm text-purple-600 flex items-center hover:text-purple-800">
+              <Camera className="h-3 w-3 mr-1" />
+              Re-analyze
+            </button>
           </div>
         </div>
       </div>
-    </div>
+    </Card>
   );
 };
 
