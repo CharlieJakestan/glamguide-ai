@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Loader2, Volume2, ChevronRight, ChevronLeft, CheckCircle, AlertTriangle, Camera, Zap } from 'lucide-react';
+import { Loader2, Volume2, ChevronRight, ChevronLeft, CheckCircle, AlertTriangle, Camera, Zap, Activity, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import GanOutput from './GanOutput';
 import { Progress } from '@/components/ui/progress';

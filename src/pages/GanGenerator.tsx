@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '@/components/Layout';
 import { useToast } from '@/hooks/use-toast';
@@ -58,7 +57,6 @@ const GanGenerator = () => {
     facialAnalysis: detectedFacialTraits
   });
   
-  // Load face detection models
   useEffect(() => {
     const setupFaceDetection = async () => {
       const success = await initFaceDetection();
@@ -78,7 +76,6 @@ const GanGenerator = () => {
     setupFaceDetection();
   }, [toast, setFaceDetectionReady]);
   
-  // Load reference looks
   useEffect(() => {
     const looks = getReferenceLooks();
     setReferenceLooks(looks);
@@ -89,19 +86,16 @@ const GanGenerator = () => {
     }
   }, [selectedLookId, lookGuidance, setReferenceLooks, setSelectedLookId]);
   
-  // Set voice API key and enable voice by default (no dialog)
   useEffect(() => {
     const defaultKey = "sk_0dfcb07ba1e4d72443fcb5385899c03e9106d3d27ddaadc2";
     setApiKey(defaultKey);
     setVoiceEnabled(true);
   }, [setVoiceEnabled]);
   
-  // Automatic face analysis when camera is active and face is detected
   const [autoAnalysisInterval, setAutoAnalysisInterval] = useState<number | null>(null);
   
   useEffect(() => {
     if (cameraActive && faceDetected && !detectedFacialTraits && !isAnalyzing) {
-      // Automatically analyze face after 2 seconds of detection
       const timer = window.setTimeout(() => {
         captureAndAnalyzeFace();
       }, 2000);
@@ -112,17 +106,15 @@ const GanGenerator = () => {
     }
   }, [cameraActive, faceDetected, detectedFacialTraits, isAnalyzing]);
   
-  // Setup continuous analysis (every 30 seconds)
   useEffect(() => {
     if (cameraActive && faceDetected) {
       if (autoAnalysisInterval === null) {
         const interval = window.setInterval(() => {
-          // Only run if not currently analyzing
           if (!isAnalyzing && detectedFacialTraits) {
             console.log('Running periodic analysis update');
             captureAndAnalyzeFace();
           }
-        }, 30000); // Every 30 seconds
+        }, 30000);
         
         setAutoAnalysisInterval(interval);
       }
@@ -140,7 +132,6 @@ const GanGenerator = () => {
     };
   }, [cameraActive, faceDetected, isAnalyzing, detectedFacialTraits]);
   
-  // Analyze face from camera
   const captureAndAnalyzeFace = useCallback(async () => {
     if (!videoRef.current || !canvasRef.current) return;
     
@@ -154,7 +145,6 @@ const GanGenerator = () => {
         throw new Error("Failed to capture frame");
       }
       
-      // First try the gan-communicate edge function, then fallback to analyzeFacialImage
       try {
         const result = await analyzeFacialImage(imageBase64, selectedLookId);
         
@@ -191,7 +181,6 @@ const GanGenerator = () => {
       } catch (error) {
         console.warn('Edge function failed, using mock data:', error);
         
-        // Fallback to mock data
         const mockTraits = generateMockFacialAnalysis();
         setDetectedFacialTraits(mockTraits);
         setAnalysisImage('/lovable-uploads/b30403d6-fafd-40f8-8dd4-e3d56d388dc0.png');
@@ -226,7 +215,6 @@ const GanGenerator = () => {
   
   const stepNames = lookGuidance.selectedLook?.steps.map(step => step.instruction) || [];
   
-  // Show loading state while face detection models are initializing
   if (isLoading && !faceDetectionReady) {
     return (
       <Layout>
@@ -254,7 +242,6 @@ const GanGenerator = () => {
             generated just for you based on advanced face analysis technology.
           </p>
           
-          {/* System status alerts */}
           {!faceDetectionReady && (
             <Alert variant="destructive" className="mb-4">
               <AlertTitle>Face Detection Not Ready</AlertTitle>
@@ -298,6 +285,7 @@ const GanGenerator = () => {
               analysisImage={analysisImage}
               analysisError={analysisError}
               voiceEnabled={voiceEnabled}
+              onVoiceEnabledChange={setVoiceEnabled}
               availableLooks={referenceLooks}
               selectedLookId={selectedLookId}
               onSelectLook={(lookId) => {
@@ -329,7 +317,6 @@ const GanGenerator = () => {
   );
 };
 
-// Mock facial analysis generator function
 const generateMockFacialAnalysis = () => {
   const skinTones = ['Fair', 'Light', 'Medium', 'Olive', 'Tan', 'Deep', 'Rich'];
   const faceShapes = ['Oval', 'Round', 'Square', 'Heart', 'Diamond', 'Rectangle'];
@@ -351,7 +338,6 @@ const generateMockFacialAnalysis = () => {
   const skinTone = skinTones[Math.floor(Math.random() * skinTones.length)];
   const faceShape = faceShapes[Math.floor(Math.random() * faceShapes.length)];
   
-  // Select 2-3 features
   const selectedFeatures: string[] = [];
   const featureCount = Math.floor(Math.random() * 2) + 2;
   
@@ -362,7 +348,6 @@ const generateMockFacialAnalysis = () => {
     }
   }
   
-  // Select 3-4 recommendations
   const selectedRecommendations: string[] = [];
   const recCount = Math.floor(Math.random() * 2) + 3;
   
