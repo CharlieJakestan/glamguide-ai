@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { Volume2, Info, Camera, Loader2, Activity } from 'lucide-react';
+import { Volume2, Info, Camera, Loader2, Activity, Zap } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -42,6 +42,7 @@ const FacialAnalysisDisplay: React.FC<FacialAnalysisDisplayProps> = ({
   const [showAIInsights, setShowAIInsights] = useState(false);
   const [animatedProgress, setAnimatedProgress] = useState(0);
   const [latestInsight, setLatestInsight] = useState<string>('');
+  const [detectedTools, setDetectedTools] = useState<Set<string>>(new Set());
   
   // Animated progress effect for better UX
   useEffect(() => {
@@ -64,6 +65,9 @@ const FacialAnalysisDisplay: React.FC<FacialAnalysisDisplayProps> = ({
       const tool = lastActivity.replace('Detected ', '');
       newInsight = `I see you're using a ${tool.toLowerCase()}. `;
       
+      // Add the detected tool to our tracking set
+      setDetectedTools(prev => new Set(prev).add(tool.toLowerCase()));
+      
       if (tool.toLowerCase().includes('foundation')) {
         newInsight += 'Apply it in circular motions for a smooth finish.';
       } else if (tool.toLowerCase().includes('brush')) {
@@ -79,7 +83,25 @@ const FacialAnalysisDisplay: React.FC<FacialAnalysisDisplayProps> = ({
       newInsight = "Your steady pose is perfect for detailed makeup application. Would you like guidance on your next step?";
     } else if (detectedMakeupTools.length > 0) {
       const mostConfidentTool = detectedMakeupTools.sort((a, b) => b.confidence - a.confidence)[0];
-      newInsight = `I see you're working with ${mostConfidentTool.type.toLowerCase()}. Do you need any specific guidance?`;
+      const toolType = mostConfidentTool.type.toLowerCase();
+      
+      // Add this tool to our tracking set as well
+      setDetectedTools(prev => new Set(prev).add(toolType));
+      
+      newInsight = `I see you're working with ${toolType}. `;
+      
+      // Provide more specific guidance based on the tool
+      if (toolType.includes('foundation')) {
+        newInsight += "Start from the center of your face and blend outward for even coverage.";
+      } else if (toolType.includes('eye')) {
+        newInsight += "Apply lighter shades to the lid and darker ones to the crease for dimension.";
+      } else if (toolType.includes('lip')) {
+        newInsight += "Define your lip shape first, then fill in the color.";
+      } else if (toolType.includes('blush')) {
+        newInsight += "Smile to find the apples of your cheeks and blend upward toward your temples.";
+      } else {
+        newInsight += "Do you need any specific guidance?";
+      }
     } else {
       // Default insight based on facial traits
       newInsight = `Based on your ${detectedFacialTraits.faceShape} face shape and ${detectedFacialTraits.skinTone} skin tone, ` +
@@ -185,6 +207,31 @@ const FacialAnalysisDisplay: React.FC<FacialAnalysisDisplayProps> = ({
                     </li>
                   ))}
                 </ul>
+              </div>
+            )}
+            
+            {/* Makeup application progress tracker */}
+            {detectedTools.size > 0 && (
+              <div className="mt-2 text-xs text-indigo-700 bg-indigo-50 p-2 rounded-md">
+                <div className="font-medium flex items-center">
+                  <Zap className="h-3 w-3 mr-1" />
+                  Makeup Application Progress:
+                </div>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {Array.from(detectedTools).map((tool, idx) => (
+                    <Badge key={idx} className="bg-indigo-100 text-indigo-700 flex items-center">
+                      <Check className="h-2 w-2 mr-1" />
+                      {tool}
+                    </Badge>
+                  ))}
+                </div>
+                <Progress 
+                  value={Math.min(detectedTools.size * 16.7, 100)} 
+                  className="h-1.5 mt-1"
+                />
+                <div className="text-right text-xs mt-1">
+                  {Math.min(Math.round(detectedTools.size * 16.7), 100)}% complete
+                </div>
               </div>
             )}
           </div>
@@ -293,6 +340,25 @@ const FacialAnalysisDisplay: React.FC<FacialAnalysisDisplayProps> = ({
         </div>
       </div>
     </Card>
+  );
+};
+
+const Check = (props: any) => {
+  return (
+    <svg 
+      xmlns="http://www.w3.org/2000/svg" 
+      width="24" 
+      height="24" 
+      viewBox="0 0 24 24" 
+      fill="none" 
+      stroke="currentColor" 
+      strokeWidth="2" 
+      strokeLinecap="round" 
+      strokeLinejoin="round" 
+      {...props}
+    >
+      <polyline points="20 6 9 17 4 12"></polyline>
+    </svg>
   );
 };
 

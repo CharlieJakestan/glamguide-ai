@@ -1,4 +1,6 @@
+
 import { supabase } from '@/lib/supabase';
+import { generateSpeech } from './voiceGuidanceService';
 
 // Define makeup style characteristics by region
 const REGIONAL_STYLES = {
@@ -49,6 +51,7 @@ export interface FaceAnalysisResult {
   overallProgress: number; // 0-1 scale
   nextStep?: string;
   feedback: string[];
+  detectedTools?: string[];
 }
 
 export interface MakeupGuidance {
@@ -62,20 +65,18 @@ export interface MakeupGuidance {
   }
 }
 
-// Mock analysis function - in a real implementation, this would call an AI API
+// Improved analysis function with AI detection integration
 export const analyzeFaceMakeup = async (
-  imageData: ImageData, 
+  imageData: ImageData | string, 
   targetLook: string,
   region: 'usa' | 'korean' | 'indian' | 'european',
-  currentStep: number
+  currentStep: number,
+  detectedTools: string[] = []
 ): Promise<FaceAnalysisResult> => {
-  // In a real implementation, we would send the image data to an AI service
-  // For now, return simulated analysis based on the step
-  
   // Simulate processing delay
   await new Promise(resolve => setTimeout(resolve, 300));
   
-  // Simple mock analysis
+  // Enhanced mock analysis using detected tools
   const mockAnalysis: FaceAnalysisResult = {
     regions: {
       'eyes': {
@@ -100,9 +101,42 @@ export const analyzeFaceMakeup = async (
         colorMatch: Math.random() > 0.4
       }
     },
-    overallProgress: Math.min(currentStep * 0.2, 0.9),
-    feedback: []
+    overallProgress: Math.min((currentStep * 0.2) + (detectedTools.length * 0.05), 0.95),
+    feedback: [],
+    detectedTools
   };
+  
+  // Adjust analysis based on detected tools
+  if (detectedTools.length > 0) {
+    detectedTools.forEach(tool => {
+      const toolLower = tool.toLowerCase();
+      
+      // Update regions based on detected tools
+      if (toolLower.includes('eye') || toolLower.includes('mascara') || toolLower.includes('liner')) {
+        mockAnalysis.regions.eyes.coverage += 0.1;
+        mockAnalysis.regions.eyes.blending += 0.1;
+      } else if (toolLower.includes('lip') || toolLower.includes('stick')) {
+        mockAnalysis.regions.lips.coverage += 0.2;
+        mockAnalysis.regions.lips.intensity += 0.1;
+      } else if (toolLower.includes('blush') || toolLower.includes('cheek')) {
+        mockAnalysis.regions.cheeks.coverage += 0.15;
+        mockAnalysis.regions.cheeks.blending += 0.1;
+      } else if (toolLower.includes('foundation') || toolLower.includes('concealer')) {
+        // Improve all regions slightly with foundation
+        Object.values(mockAnalysis.regions).forEach(region => {
+          region.colorMatch = true;
+          region.blending += 0.05;
+        });
+      }
+    });
+  }
+  
+  // Ensure values stay in valid range
+  Object.values(mockAnalysis.regions).forEach(region => {
+    region.coverage = Math.min(region.coverage, 1);
+    region.intensity = Math.min(region.intensity, 1);
+    region.blending = Math.min(region.blending, 1);
+  });
   
   // Generate feedback based on analysis
   Object.entries(mockAnalysis.regions).forEach(([region, analysis]) => {
@@ -155,6 +189,10 @@ export const generateNextStepGuidance = (
       instruction: "Your makeup application is progressing well! Focus on final touches and blending for a seamless finish.",
       voiceInstruction: "Your makeup is looking good! Now focus on blending all areas for a seamless finish."
     };
+    
+    // Generate speech from this guidance
+    generateSpeech(overallGuidance.voiceInstruction);
+    
     return overallGuidance;
   }
   
@@ -180,6 +218,21 @@ export const generateNextStepGuidance = (
     instruction += `Remember: ${REGIONAL_STYLES[region].technique}`;
     voiceInstruction += `Remember, for ${region} style makeup: ${REGIONAL_STYLES[region].technique}`;
   }
+  
+  // Include personalized guidance based on detected tools
+  if (analysis.detectedTools && analysis.detectedTools.length > 0) {
+    const tools = analysis.detectedTools;
+    
+    if (tools.some(t => t.toLowerCase().includes(lowestProgressRegion))) {
+      instruction += ` Great choice using your ${tools.find(t => 
+        t.toLowerCase().includes(lowestProgressRegion))} for this step!`;
+      voiceInstruction += ` Great choice using your ${tools.find(t => 
+        t.toLowerCase().includes(lowestProgressRegion))} for this step!`;
+    }
+  }
+  
+  // Generate speech from this guidance
+  generateSpeech(voiceInstruction);
   
   return {
     instruction,

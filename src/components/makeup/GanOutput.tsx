@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Loader2, AlertCircle, Check, Info, RefreshCw } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
@@ -18,6 +18,7 @@ interface GanOutputProps {
   onRegenerate?: () => void;
   progressPercentage?: number;
   faceDetected?: boolean;
+  facePosition?: { x: number; y: number; width: number; height: number } | null;
 }
 
 const GanOutput: React.FC<GanOutputProps> = ({
@@ -28,11 +29,14 @@ const GanOutput: React.FC<GanOutputProps> = ({
   facialAnalysis,
   onRegenerate,
   progressPercentage = 0,
-  faceDetected = false
+  faceDetected = false,
+  facePosition = null
 }) => {
   const [loaded, setLoaded] = useState(false);
   const [fadeIn, setFadeIn] = useState(false);
   const [animatedProgress, setAnimatedProgress] = useState(0);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
   
   // Reset state when a new image is loading
   useEffect(() => {
@@ -71,6 +75,63 @@ const GanOutput: React.FC<GanOutputProps> = ({
   const handleImageLoad = () => {
     setLoaded(true);
   };
+
+  // Draw facial tracking overlay when face is detected
+  useEffect(() => {
+    if (loaded && faceDetected && facePosition && canvasRef.current && imageRef.current) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Set canvas size to match image
+      canvas.width = imageRef.current.width;
+      canvas.height = imageRef.current.height;
+
+      // Clear previous drawings
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw facial tracking elements
+      const scaleX = canvas.width / 100; // Assuming facePosition is in percentages
+      const scaleY = canvas.height / 100;
+
+      // Draw face outline
+      const x = facePosition.x * scaleX;
+      const y = facePosition.y * scaleY;
+      const width = facePosition.width * scaleX;
+      const height = facePosition.height * scaleY;
+      
+      // Draw pulsating circle around face
+      const pulseAmount = 0.05;
+      const pulseSpeed = 0.003;
+      const pulseScale = 1 + Math.sin(Date.now() * pulseSpeed) * pulseAmount;
+      
+      ctx.beginPath();
+      ctx.ellipse(
+        x + width/2, 
+        y + height/2,
+        (width/2) * pulseScale,
+        (height/2) * pulseScale,
+        0, 0, 2 * Math.PI
+      );
+      ctx.strokeStyle = 'rgba(120, 90, 220, 0.6)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      
+      // Draw crosshair at center
+      const centerX = x + width/2;
+      const centerY = y + height/2;
+      const crosshairSize = width * 0.1;
+      
+      ctx.beginPath();
+      ctx.moveTo(centerX - crosshairSize, centerY);
+      ctx.lineTo(centerX + crosshairSize, centerY);
+      ctx.moveTo(centerX, centerY - crosshairSize);
+      ctx.lineTo(centerX, centerY + crosshairSize);
+      ctx.strokeStyle = 'rgba(120, 90, 220, 0.8)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }, [loaded, faceDetected, facePosition]);
   
   if (error) {
     return (
@@ -119,10 +180,17 @@ const GanOutput: React.FC<GanOutputProps> = ({
           className={`w-full h-full transition-opacity duration-300 ${fadeIn ? 'opacity-100' : 'opacity-0'}`}
         >
           <img
+            ref={imageRef}
             src={imageUrl}
             alt="GAN output"
             className="w-full h-full object-cover"
             onLoad={handleImageLoad}
+          />
+          
+          {/* Canvas overlay for face tracking visualization */}
+          <canvas 
+            ref={canvasRef}
+            className="absolute inset-0 w-full h-full pointer-events-none"
           />
           
           {/* Face detection indicator */}

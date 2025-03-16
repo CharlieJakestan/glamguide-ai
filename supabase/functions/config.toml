@@ -1,0 +1,28 @@
+
+project_id = "sohojvlvvhshsxdrhexr"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage"]
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[[db.schemas]]
+name = "public"
+
+[[db.schemas]]
+name = "storage"
+
+[realtime]
+enabled = true
+
+[storage]
+enabled = true
+
+[studio]
+enabled = true
+port = 54323
