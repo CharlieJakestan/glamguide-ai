@@ -74,9 +74,9 @@ const FacialAnalysisDisplay: React.FC<FacialAnalysisDisplayProps> = ({
         newInsight += 'Make sure to blend thoroughly for a seamless look.';
       }
     } else if (movementData && movementData.magnitude > 5) {
-      newInsight = 'I notice you're moving quite a bit. Try to keep still for more precise makeup application.';
+      newInsight = "I notice you're moving quite a bit. Try to keep still for more precise makeup application.";
     } else if (movementData && movementData.magnitude < 1 && lastActivity?.includes('looking')) {
-      newInsight = 'Your steady pose is perfect for detailed makeup application. Would you like guidance on your next step?';
+      newInsight = "Your steady pose is perfect for detailed makeup application. Would you like guidance on your next step?";
     } else if (detectedMakeupTools.length > 0) {
       const mostConfidentTool = detectedMakeupTools.sort((a, b) => b.confidence - a.confidence)[0];
       newInsight = `I see you're working with ${mostConfidentTool.type.toLowerCase()}. Do you need any specific guidance?`;
