@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Loader2, Volume2, ChevronRight, ChevronLeft, CheckCircle, AlertTriangle, Camera, Zap, Activity, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -12,6 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import VoiceGuidance from './VoiceGuidance';
 import { DetectedObject } from '@/hooks/useMakeupObjectDetection';
+import { ReferenceLook, getReferenceLookById } from '@/services/lookReferenceService';
 
 interface FaceAnalysisCameraProps {
   cameraActive: boolean;
@@ -85,42 +85,34 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
   const canvasContextRef = useRef<CanvasRenderingContext2D | null>(null);
   const cameraContainerRef = useRef<HTMLDivElement>(null);
   
-  // Draw guide overlay on canvas for real-time feedback
   const drawOverlay = useCallback(() => {
     if (!canvasRef.current || !videoRef.current || !canvasContextRef.current) return;
     
     const canvas = canvasRef.current;
     const ctx = canvasContextRef.current;
     
-    // Set canvas dimensions to match video
     if (canvas.width !== videoRef.current.videoWidth || canvas.height !== videoRef.current.videoHeight) {
       canvas.width = videoRef.current.videoWidth || 640;
       canvas.height = videoRef.current.videoHeight || 480;
     }
     
-    // Clear previous drawings
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     if (!faceDetected) return;
     
-    // Add more dynamic and responsive overlays
     try {
-      // Face tracking circle
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
       const radius = Math.min(canvas.width, canvas.height) * 0.2;
       
-      // Pulsing effect for tracking circle
       const pulseScale = 1 + Math.sin(Date.now() * 0.003) * 0.05;
       
-      // Draw face tracking indicator - basic version
       ctx.beginPath();
       ctx.arc(centerX, centerY, radius * pulseScale, 0, 2 * Math.PI);
       ctx.strokeStyle = 'rgba(120, 90, 220, 0.6)';
       ctx.lineWidth = 3;
       ctx.stroke();
       
-      // Draw cross-hairs
       const crosshairSize = radius * 0.2;
       ctx.beginPath();
       ctx.moveTo(centerX - crosshairSize, centerY);
@@ -131,13 +123,11 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
       ctx.lineWidth = 2;
       ctx.stroke();
       
-      // Highlight region of focus if specified
       if (highlightedRegion) {
         let regionX = centerX;
         let regionY = centerY;
         let regionRadius = radius * 0.5;
         
-        // Adjust position based on region
         if (highlightedRegion === 'eyes') {
           regionY = centerY - radius * 0.3;
           regionRadius = radius * 0.4;
@@ -150,7 +140,6 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
           regionRadius = radius * 0.3;
         }
         
-        // Draw highlighted region
         ctx.beginPath();
         ctx.arc(regionX, regionY, regionRadius, 0, 2 * Math.PI);
         ctx.fillStyle = 'rgba(255, 100, 180, 0.2)';
@@ -160,13 +149,11 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
         ctx.stroke();
       }
       
-      // Draw nearby detected objects
       if (nearbyObjects && nearbyObjects.length > 0) {
         nearbyObjects.forEach(obj => {
           const objX = obj.position.x;
           const objY = obj.position.y;
           
-          // Draw object indicator
           ctx.beginPath();
           ctx.arc(objX, objY, 15, 0, 2 * Math.PI);
           ctx.fillStyle = 'rgba(50, 200, 120, 0.2)';
@@ -175,7 +162,6 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
           ctx.lineWidth = 2;
           ctx.stroke();
           
-          // Draw line connecting to face
           ctx.beginPath();
           ctx.moveTo(centerX, centerY);
           ctx.lineTo(objX, objY);
@@ -185,7 +171,6 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
           ctx.stroke();
           ctx.setLineDash([]);
           
-          // Draw label
           ctx.font = '12px Arial';
           ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
           ctx.textAlign = 'center';
@@ -193,7 +178,6 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
         });
       }
       
-      // Display movement indicator
       if (movementData && movementData.magnitude > 1) {
         const movX = centerX + movementData.x * canvas.width * 0.5;
         const movY = centerY + movementData.y * canvas.height * 0.5;
@@ -215,7 +199,6 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
     }
   }, [canvasRef, videoRef, faceDetected, highlightedRegion, nearbyObjects, movementData]);
   
-  // Set up canvas context and render loop
   useEffect(() => {
     if (!canvasRef.current) return;
     
@@ -240,7 +223,6 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
     };
   }, [canvasRef, drawOverlay]);
   
-  // Update highlighted region based on guidance
   useEffect(() => {
     if (!currentGuidance) return;
     
@@ -264,12 +246,19 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
     return instruction ? instruction.instruction : '';
   };
   
+  const getSelectedLook = (): ReferenceLook | null => {
+    if (!selectedLookId || !availableLooks || availableLooks.length === 0) return null;
+    
+    const selectedLook = availableLooks.find(look => look.id === selectedLookId);
+    return selectedLook || null;
+  };
+  
+  const selectedLook = getSelectedLook();
+  
   return (
     <div className="space-y-4 mb-8">
       <div className="bg-white rounded-xl shadow-md overflow-hidden">
-        {/* Camera container */}
         <div ref={cameraContainerRef} className="relative aspect-video bg-gray-900">
-          {/* Video element for camera feed */}
           <video
             ref={videoRef}
             autoPlay
@@ -277,14 +266,10 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
             muted
             className={`absolute inset-0 w-full h-full object-cover ${!faceDetected ? 'opacity-60' : ''}`}
           />
-          
-          {/* Canvas overlay for drawing face tracking */}
           <canvas
             ref={canvasRef}
             className="absolute inset-0 w-full h-full"
           />
-          
-          {/* Guidance overlay */}
           {showGuidance && faceDetected && currentGuidance && (
             <div className="absolute bottom-4 left-4 right-4 bg-black/50 backdrop-blur-sm p-3 rounded-lg text-white">
               <div className="flex items-start space-x-2">
@@ -301,8 +286,6 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
               <Progress value={progressPercentage} className="mt-2 h-1" />
             </div>
           )}
-          
-          {/* Face detection indicator */}
           <div 
             className={`absolute top-4 right-4 px-2 py-1 rounded transition-colors ${
               faceDetected 
@@ -324,8 +307,6 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
               )}
             </div>
           </div>
-          
-          {/* Controls overlay */}
           <div className="absolute top-4 left-4 flex items-center space-x-2">
             <Button 
               variant="outline" 
@@ -336,7 +317,6 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
               <Camera className="h-3 w-3 mr-1" />
               {cameraActive ? 'Stop Camera' : 'Start Camera'}
             </Button>
-            
             <Button 
               variant="outline" 
               size="sm" 
@@ -347,8 +327,6 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
               {overlayVisible ? 'Hide Overlay' : 'Show Overlay'}
             </Button>
           </div>
-          
-          {/* Loading indicator during analysis */}
           {isAnalyzing && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/40">
               <div className="bg-white p-4 rounded-lg flex flex-col items-center">
@@ -359,8 +337,6 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
             </div>
           )}
         </div>
-        
-        {/* Look control buttons */}
         <div className="p-4 bg-gray-50 border-t border-gray-200">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
@@ -427,18 +403,14 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
           </div>
         </div>
       </div>
-      
-      {/* Look details and progress */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="md:col-span-2">
-          <LookDetailsPanel
-            looks={availableLooks}
-            selectedLookId={selectedLookId}
-            onSelectLook={onSelectLook}
-            showRecommendations={!!detectedFacialTraits}
-          />
-          
-          {/* Facial analysis results */}
+          {selectedLook && (
+            <LookDetailsPanel
+              look={selectedLook}
+              personalizedRecommendations={detectedFacialTraits?.recommendations}
+            />
+          )}
           {detectedFacialTraits && (
             <FacialAnalysisDisplay
               detectedFacialTraits={detectedFacialTraits}
@@ -454,9 +426,7 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
             />
           )}
         </div>
-        
         <div>
-          {/* Voice guidance system */}
           <VoiceGuidance
             enabled={voiceEnabled}
             onEnabledChange={onVoiceEnabledChange}
@@ -470,8 +440,6 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
             movementData={movementData}
             detectedMakeupTools={detectedMakeupTools}
           />
-          
-          {/* Look progress tracker */}
           <div className="mt-4">
             <LookProgressTracker
               currentStep={lookGuidance.currentStep}
@@ -481,8 +449,6 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
               onSelectStep={lookGuidance.selectStep}
             />
           </div>
-          
-          {/* Error display */}
           {analysisError && (
             <Alert variant="destructive" className="mt-4">
               <AlertTriangle className="h-4 w-4" />
