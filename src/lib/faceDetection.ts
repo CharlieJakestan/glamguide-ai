@@ -1,3 +1,4 @@
+
 import * as faceapi from 'face-api.js';
 
 // Last detected landmarks for movement tracking
@@ -14,8 +15,8 @@ export const initFaceDetection = async (maxRetries = 3): Promise<boolean> => {
   
   // Define both local and CDN paths
   const modelPaths = [
-    '/models',  // Local path
-    'https://justadudewhohacks.github.io/face-api.js/models' // CDN fallback
+    'https://justadudewhohacks.github.io/face-api.js/models', // Primary path - start with CDN
+    '/models'  // Local fallback
   ];
   
   let currentPathIndex = 0;
@@ -75,10 +76,10 @@ export const detectFacialLandmarks = async (video: HTMLVideoElement) => {
   if (!video) return null;
   
   try {
-    // Using more forgiving detection parameters
+    // More sensitive detection parameters for better accuracy
     const options = new faceapi.TinyFaceDetectorOptions({
-      inputSize: 320,  // Lower for better performance
-      scoreThreshold: 0.3  // Lower threshold for better detection in challenging conditions
+      inputSize: 320,
+      scoreThreshold: 0.2  // Lower threshold for better detection in challenging conditions
     });
     
     const detections = await faceapi
@@ -106,13 +107,12 @@ export const detectFacialLandmarks = async (video: HTMLVideoElement) => {
       // Update last detected landmarks
       lastDetectedLandmarks = detections.landmarks;
       
-      console.log('Face detected successfully');
       return detections;
     } else {
       // Try again with even more lenient parameters if initial detection fails
       const fallbackOptions = new faceapi.TinyFaceDetectorOptions({
-        inputSize: 256,
-        scoreThreshold: 0.2
+        inputSize: 224, // Smaller input size for faster detection
+        scoreThreshold: 0.1 // Very lenient threshold
       });
       
       const fallbackDetections = await faceapi
@@ -124,12 +124,12 @@ export const detectFacialLandmarks = async (video: HTMLVideoElement) => {
         
         // Update last detected landmarks
         lastDetectedLandmarks = fallbackDetections.landmarks;
+        return fallbackDetections;
       } else {
         // Clear last landmarks if face is lost
         lastDetectedLandmarks = null;
+        return null;
       }
-      
-      return fallbackDetections;
     }
   } catch (error) {
     console.error('Error detecting facial landmarks:', error);
@@ -147,9 +147,14 @@ const detectMovement = (
     const prevNose = previous.getNose()[0]; // Nose tip
     const currNose = current.getNose()[0];
     
+    // Calculate smoother movement by considering the average of multiple points
+    const prevEyes = previous.getLeftEye()[0];
+    const currEyes = current.getLeftEye()[0];
+    
+    // Weight the movement of nose and eyes for more stable tracking
     return {
-      x: currNose.x - prevNose.x,
-      y: currNose.y - prevNose.y
+      x: (currNose.x - prevNose.x) * 0.7 + (currEyes.x - prevEyes.x) * 0.3,
+      y: (currNose.y - prevNose.y) * 0.7 + (currEyes.y - prevEyes.y) * 0.3
     };
   } catch (error) {
     console.error('Error detecting movement:', error);
@@ -157,13 +162,24 @@ const detectMovement = (
   }
 };
 
-// Get current movement trends from history
+// Get current movement trends from history with enhanced smoothing
 export const getMovementTrends = () => {
   if (movementHistory.length < 2) return { x: 0, y: 0, magnitude: 0 };
   
-  // Calculate average movement from recent history
-  const avgX = movementHistory.reduce((sum, m) => sum + m.x, 0) / movementHistory.length;
-  const avgY = movementHistory.reduce((sum, m) => sum + m.y, 0) / movementHistory.length;
+  // Calculate weighted average - more recent movements have higher weights
+  let totalWeight = 0;
+  let weightedSumX = 0;
+  let weightedSumY = 0;
+  
+  for (let i = 0; i < movementHistory.length; i++) {
+    const weight = (i + 1) / movementHistory.length; // More recent = higher weight
+    weightedSumX += movementHistory[i].x * weight;
+    weightedSumY += movementHistory[i].y * weight;
+    totalWeight += weight;
+  }
+  
+  const avgX = weightedSumX / totalWeight;
+  const avgY = weightedSumY / totalWeight;
   
   // Calculate magnitude of movement
   const magnitude = Math.sqrt(avgX * avgX + avgY * avgY);
@@ -171,7 +187,7 @@ export const getMovementTrends = () => {
   return { x: avgX, y: avgY, magnitude };
 };
 
-// Apply virtual makeup based on detected landmarks
+// Apply virtual makeup based on detected landmarks with improved rendering
 export const applyVirtualMakeup = (
   canvas: HTMLCanvasElement,
   landmarks: faceapi.FaceLandmarks68,
@@ -185,9 +201,9 @@ export const applyVirtualMakeup = (
   // Clear canvas
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   
-  // Apply each product
+  // Apply each product with improved blending
   products.forEach(product => {
-    switch (product.type) {
+    switch (product.type.toLowerCase()) {
       case 'lipstick':
         applyLipstick(ctx, landmarks, product.color, product.intensity);
         break;
@@ -197,12 +213,18 @@ export const applyVirtualMakeup = (
       case 'eyeshadow':
         applyEyeshadow(ctx, landmarks, product.color, product.intensity);
         break;
-      // Add more product types as needed
+      case 'foundation':
+        applyFoundation(ctx, landmarks, product.color, product.intensity);
+        break;
+      case 'highlighter':
+        applyHighlighter(ctx, landmarks, product.color, product.intensity);
+        break;
+      // Support for more product types
     }
   });
 };
 
-// Helper functions for applying specific makeup products
+// Helper functions for applying specific makeup products with improved realism
 const applyLipstick = (
   ctx: CanvasRenderingContext2D,
   landmarks: faceapi.FaceLandmarks68,
@@ -214,22 +236,40 @@ const applyLipstick = (
   ctx.beginPath();
   ctx.moveTo(mouth[0].x, mouth[0].y);
   
-  // Draw upper lip
+  // Draw upper lip with smoother curve
   for (let i = 1; i < 7; i++) {
-    ctx.lineTo(mouth[i].x, mouth[i].y);
+    const cp1x = mouth[i-1].x + (mouth[i].x - mouth[i-1].x) * 0.5;
+    const cp1y = mouth[i-1].y + (mouth[i].y - mouth[i-1].y) * 0.2;
+    ctx.quadraticCurveTo(cp1x, cp1y, mouth[i].x, mouth[i].y);
   }
   
-  // Draw lower lip
+  // Draw lower lip with smoother curve
   for (let i = 6; i < 12; i++) {
-    ctx.lineTo(mouth[i].x, mouth[i].y);
+    const cp1x = mouth[i].x + (mouth[i+1 >= mouth.length ? 0 : i+1].x - mouth[i].x) * 0.5;
+    const cp1y = mouth[i].y + (mouth[i+1 >= mouth.length ? 0 : i+1].y - mouth[i].y) * 0.2;
+    ctx.quadraticCurveTo(cp1x, cp1y, mouth[i+1 >= mouth.length ? 0 : i+1].x, mouth[i+1 >= mouth.length ? 0 : i+1].y);
   }
   
   ctx.closePath();
   
-  // Apply color with intensity
-  const alpha = Math.min(intensity, 1).toFixed(1);
-  ctx.fillStyle = `${color}${Math.round(intensity * 255).toString(16).padStart(2, '0')}`;
+  // Apply color with intensity and better alpha blending for realism
+  const alphaHex = Math.round(Math.min(intensity, 1) * 255).toString(16).padStart(2, '0');
+  ctx.fillStyle = `${color}${alphaHex}`;
   ctx.fill();
+  
+  // Add subtle highlight for glossiness
+  if (intensity > 0.6) {
+    ctx.beginPath();
+    ctx.moveTo(mouth[3].x, mouth[3].y);
+    ctx.quadraticCurveTo(
+      (mouth[3].x + mouth[4].x) / 2, 
+      (mouth[3].y + mouth[4].y) / 2 - 2,
+      mouth[4].x, mouth[4].y
+    );
+    ctx.strokeStyle = `rgba(255, 255, 255, ${intensity * 0.4})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
 };
 
 const applyBlush = (
@@ -241,24 +281,46 @@ const applyBlush = (
   const jawline = landmarks.getJawOutline();
   const nose = landmarks.getNose();
   
-  // Left cheek
+  // Left cheek - more accurate positioning based on face shape
   const leftCheekX = (jawline[2].x + nose[0].x) / 2;
   const leftCheekY = (jawline[2].y + nose[0].y) / 2;
   
-  // Right cheek
+  // Right cheek - more accurate positioning based on face shape
   const rightCheekX = (jawline[14].x + nose[0].x) / 2;
   const rightCheekY = (jawline[14].y + nose[0].y) / 2;
   
-  // Apply blush to left cheek
+  // Calculate appropriate radius based on face size
+  const faceWidth = Math.max(jawline[16].x - jawline[0].x, 50);
+  const blushRadius = faceWidth * 0.15; // Proportional to face width
+  
+  // Create radial gradient for more realistic blush
+  const leftGradient = ctx.createRadialGradient(
+    leftCheekX, leftCheekY, 0,
+    leftCheekX, leftCheekY, blushRadius
+  );
+  
+  const alphaHex = Math.round(Math.min(intensity, 1) * 255).toString(16).padStart(2, '0');
+  leftGradient.addColorStop(0, `${color}${alphaHex}`);
+  leftGradient.addColorStop(1, `${color}00`);
+  
+  // Apply blush to left cheek with gradient
   ctx.beginPath();
-  ctx.arc(leftCheekX, leftCheekY, 30, 0, 2 * Math.PI);
-  ctx.fillStyle = `${color}${Math.round(intensity * 255).toString(16).padStart(2, '0')}`;
+  ctx.arc(leftCheekX, leftCheekY, blushRadius, 0, 2 * Math.PI);
+  ctx.fillStyle = leftGradient;
   ctx.fill();
   
-  // Apply blush to right cheek
+  // Repeat for right cheek
+  const rightGradient = ctx.createRadialGradient(
+    rightCheekX, rightCheekY, 0,
+    rightCheekX, rightCheekY, blushRadius
+  );
+  
+  rightGradient.addColorStop(0, `${color}${alphaHex}`);
+  rightGradient.addColorStop(1, `${color}00`);
+  
   ctx.beginPath();
-  ctx.arc(rightCheekX, rightCheekY, 30, 0, 2 * Math.PI);
-  ctx.fillStyle = `${color}${Math.round(intensity * 255).toString(16).padStart(2, '0')}`;
+  ctx.arc(rightCheekX, rightCheekY, blushRadius, 0, 2 * Math.PI);
+  ctx.fillStyle = rightGradient;
   ctx.fill();
 };
 
@@ -271,28 +333,150 @@ const applyEyeshadow = (
   const leftEye = landmarks.getLeftEye();
   const rightEye = landmarks.getRightEye();
   
-  // Apply eyeshadow to left eye
+  // Enhanced eyeshadow application with gradient effect
+  const applyToEye = (eye: any[]) => {
+    // Calculate center and dimensions of eye
+    let sumX = 0, sumY = 0;
+    eye.forEach(point => {
+      sumX += point.x;
+      sumY += point.y;
+    });
+    const centerX = sumX / eye.length;
+    const centerY = sumY / eye.length;
+    
+    // Find eye dimensions
+    let minX = eye[0].x, maxX = eye[0].x, minY = eye[0].y, maxY = eye[0].y;
+    eye.forEach(point => {
+      minX = Math.min(minX, point.x);
+      maxX = Math.max(maxX, point.x);
+      minY = Math.min(minY, point.y);
+      maxY = Math.max(maxY, point.y);
+    });
+    
+    const width = maxX - minX;
+    const height = maxY - minY;
+    
+    // Create extended path for eyeshadow (larger than just the eye)
+    ctx.beginPath();
+    ctx.moveTo(eye[0].x, eye[0].y - height * 0.5);
+    
+    // Upper lid with extension
+    for (let i = 1; i < eye.length / 2; i++) {
+      ctx.lineTo(eye[i].x, eye[i].y - height * 0.5);
+    }
+    
+    // Lower lid
+    for (let i = Math.floor(eye.length / 2); i < eye.length; i++) {
+      ctx.lineTo(eye[i].x, eye[i].y);
+    }
+    ctx.closePath();
+    
+    // Create gradient for realistic eyeshadow
+    const gradient = ctx.createRadialGradient(
+      centerX, centerY - height * 0.2, 0,
+      centerX, centerY - height * 0.2, width * 1.2
+    );
+    
+    const alphaHex = Math.round(Math.min(intensity, 1) * 255).toString(16).padStart(2, '0');
+    gradient.addColorStop(0, `${color}${alphaHex}`);
+    gradient.addColorStop(1, `${color}00`);
+    
+    ctx.fillStyle = gradient;
+    ctx.fill();
+  };
+  
+  // Apply to both eyes
+  applyToEye(leftEye);
+  applyToEye(rightEye);
+};
+
+const applyFoundation = (
+  ctx: CanvasRenderingContext2D,
+  landmarks: faceapi.FaceLandmarks68,
+  color: string,
+  intensity: number
+) => {
+  const jawline = landmarks.getJawOutline();
+  
+  // Create a path around the face
   ctx.beginPath();
-  ctx.moveTo(leftEye[0].x, leftEye[0].y);
+  ctx.moveTo(jawline[0].x, jawline[0].y);
   
-  for (let i = 1; i < leftEye.length; i++) {
-    ctx.lineTo(leftEye[i].x, leftEye[i].y);
-  }
+  // Draw along jawline
+  jawline.forEach(point => {
+    ctx.lineTo(point.x, point.y);
+  });
   
+  // Connect to forehead
+  const foreheadY = Math.min(...landmarks.positions.map(p => p.y)) - 10;
+  ctx.lineTo(jawline[jawline.length - 1].x, foreheadY);
+  ctx.lineTo(jawline[0].x, foreheadY);
   ctx.closePath();
-  ctx.fillStyle = `${color}${Math.round(intensity * 255).toString(16).padStart(2, '0')}`;
+  
+  // Apply foundation with correct intensity
+  const alphaHex = Math.round(Math.min(intensity * 0.7, 0.7) * 255).toString(16).padStart(2, '0');
+  ctx.fillStyle = `${color}${alphaHex}`;
+  ctx.fill();
+};
+
+const applyHighlighter = (
+  ctx: CanvasRenderingContext2D,
+  landmarks: faceapi.FaceLandmarks68,
+  color: string,
+  intensity: number
+) => {
+  const nose = landmarks.getNose();
+  const noseTip = nose[3]; // Tip of nose
+  
+  // Apply to nose bridge
+  const gradient = ctx.createLinearGradient(
+    noseTip.x, noseTip.y - 20,
+    noseTip.x, noseTip.y
+  );
+  
+  const alphaHex = Math.round(Math.min(intensity, 1) * 255).toString(16).padStart(2, '0');
+  gradient.addColorStop(0, `${color}${alphaHex}`);
+  gradient.addColorStop(1, `${color}00`);
+  
+  ctx.beginPath();
+  ctx.ellipse(noseTip.x, noseTip.y - 10, 5, 10, 0, 0, 2 * Math.PI);
+  ctx.fillStyle = gradient;
   ctx.fill();
   
-  // Apply eyeshadow to right eye
+  // Apply to cheekbones
+  const jawline = landmarks.getJawOutline();
+  const leftCheekboneX = (jawline[3].x + nose[0].x) / 2;
+  const leftCheekboneY = (jawline[3].y + nose[0].y) / 2;
+  
+  const rightCheekboneX = (jawline[13].x + nose[0].x) / 2;
+  const rightCheekboneY = (jawline[13].y + nose[0].y) / 2;
+  
+  // Left cheekbone
+  const leftGradient = ctx.createRadialGradient(
+    leftCheekboneX, leftCheekboneY, 0,
+    leftCheekboneX, leftCheekboneY, 15
+  );
+  
+  leftGradient.addColorStop(0, `${color}${alphaHex}`);
+  leftGradient.addColorStop(1, `${color}00`);
+  
   ctx.beginPath();
-  ctx.moveTo(rightEye[0].x, rightEye[0].y);
+  ctx.arc(leftCheekboneX, leftCheekboneY, 15, 0, 2 * Math.PI);
+  ctx.fillStyle = leftGradient;
+  ctx.fill();
   
-  for (let i = 1; i < rightEye.length; i++) {
-    ctx.lineTo(rightEye[i].x, rightEye[i].y);
-  }
+  // Right cheekbone
+  const rightGradient = ctx.createRadialGradient(
+    rightCheekboneX, rightCheekboneY, 0,
+    rightCheekboneX, rightCheekboneY, 15
+  );
   
-  ctx.closePath();
-  ctx.fillStyle = `${color}${Math.round(intensity * 255).toString(16).padStart(2, '0')}`;
+  rightGradient.addColorStop(0, `${color}${alphaHex}`);
+  rightGradient.addColorStop(1, `${color}00`);
+  
+  ctx.beginPath();
+  ctx.arc(rightCheekboneX, rightCheekboneY, 15, 0, 2 * Math.PI);
+  ctx.fillStyle = rightGradient;
   ctx.fill();
 };
 
@@ -303,4 +487,46 @@ export const getMovementHistory = () => [...movementHistory];
 export const resetTracking = () => {
   lastDetectedLandmarks = null;
   movementHistory = [];
+};
+
+// Add object detection function for AI to recognize makeup tools
+export const detectMakeupObjects = (videoElement: HTMLVideoElement): Promise<Array<{
+  type: string;
+  confidence: number;
+  position: { x: number, y: number };
+}>> => {
+  return new Promise((resolve) => {
+    // This is a placeholder for a real AI-based object detection
+    // In a production app, this would use a real ML model to detect makeup tools
+    
+    // Simulated detection for testing UI
+    setTimeout(() => {
+      // 30% chance to detect an object
+      if (Math.random() < 0.3) {
+        const products = [
+          'Foundation brush',
+          'Lipstick',
+          'Eyeshadow palette', 
+          'Blush brush',
+          'Makeup sponge',
+          'Concealer',
+          'Mascara wand',
+          'Eyeliner pen'
+        ];
+        
+        const detectedProduct = products[Math.floor(Math.random() * products.length)];
+        
+        resolve([{
+          type: detectedProduct,
+          confidence: 0.7 + Math.random() * 0.3,
+          position: { 
+            x: Math.random() * videoElement.videoWidth, 
+            y: Math.random() * videoElement.videoHeight
+          }
+        }]);
+      } else {
+        resolve([]);
+      }
+    }, 300);
+  });
 };
