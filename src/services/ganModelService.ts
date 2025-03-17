@@ -19,6 +19,8 @@ export interface GanPredictionResult {
 
 // Cache for avoiding redundant downloads
 const modelCache: Record<string, GanModel> = {};
+let lastErrorTimestamp = 0;
+const ERROR_COOLDOWN = 5000; // 5 seconds between error messages
 
 /**
  * Get GAN model from Supabase storage using the Edge Function
@@ -32,6 +34,8 @@ export const getGanModel = async (style: string = 'casual_day'): Promise<GanMode
       return modelCache[style];
     }
 
+    console.log('Fetching GAN model for style:', style);
+    
     // Call the Edge Function to get model info and signed URLs
     const { data, error } = await supabase.functions.invoke('get-gan-model', {
       body: { style },
@@ -61,7 +65,12 @@ export const getGanModel = async (style: string = 'casual_day'): Promise<GanMode
     modelCache[style] = model;
     return model;
   } catch (err) {
-    console.error('Error in getGanModel:', err);
+    const now = Date.now();
+    // Avoid spamming error logs
+    if (now - lastErrorTimestamp > ERROR_COOLDOWN) {
+      console.error('Error in getGanModel:', err);
+      lastErrorTimestamp = now;
+    }
     return null;
   }
 };

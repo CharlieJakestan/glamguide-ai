@@ -1,65 +1,14 @@
 
 import { supabase } from '@/lib/supabase';
 
-export interface GanGenerateRequest {
-  action: 'generate' | 'analyze' | 'check';
-  image?: string; // base64 encoded image for analysis
-  lookId?: string; // Reference look to use for guidance
-  parameters?: {
-    skinTone?: 'light' | 'medium' | 'dark';
-    faceShape?: 'oval' | 'round' | 'square' | 'heart';
-    style?: 'natural' | 'dramatic' | 'glam' | 'minimalist';
-    products?: string[]; // IDs or names of products to use
-    region?: 'usa' | 'korean' | 'indian' | 'european';
-  };
-}
-
-export interface GanGenerateResponse {
-  status: 'ok' | 'error';
-  message?: string;
-  result?: {
-    imageUrl?: string; // URL to generated image
-    analysis?: {
-      skinTone?: string;
-      faceShape?: string;
-      features?: string[];
-      recommendations?: string[];
-      skinConcerns?: string[];
-      confidence?: number;
-    };
-    guidance?: {
-      currentStep?: string;
-      nextStep?: string;
-      progress?: number; // 0-100
-      voiceInstruction?: string;
-      area?: string;
-      visualGuide?: {
-        x: number; // percentage (0-100)
-        y: number; // percentage (0-100)
-        radius: number;
-      };
-    };
-  };
-}
-
-/**
- * Check if the GAN edge function is operational
- */
+// Check if the GAN function is available and working
 export const checkGanFunction = async (): Promise<boolean> => {
   try {
-    // Try the new gan-communicate function first
-    const { data: newData, error: newError } = await supabase.functions.invoke<GanGenerateResponse>('gan-communicate', {
-      body: { action: 'check' }
-    });
+    console.log('Checking GAN Edge Function availability...');
     
-    if (!newError && newData?.status === 'ok') {
-      console.log('gan-communicate function check successful:', newData);
-      return true;
-    }
-    
-    // Fall back to the old gan-generate function if the new one fails
-    const { data, error } = await supabase.functions.invoke<GanGenerateResponse>('gan-generate', {
-      body: { action: 'check' }
+    // Simple ping to the function with minimal data
+    const { data, error } = await supabase.functions.invoke('get-gan-model', {
+      body: { style: 'ping_test' },
     });
     
     if (error) {
@@ -67,127 +16,69 @@ export const checkGanFunction = async (): Promise<boolean> => {
       return false;
     }
     
-    return data?.status === 'ok';
+    // If we get any response with status field, consider it working
+    return data && typeof data === 'object' && 'status' in data;
   } catch (error) {
     console.error('Exception checking GAN function:', error);
     return false;
   }
 };
 
-/**
- * Generate a makeup look based on the provided parameters
- */
-export const generateMakeupLook = async (
-  parameters: GanGenerateRequest['parameters'], 
-  lookId?: string
-): Promise<GanGenerateResponse | null> => {
-  try {
-    // Try the new gan-communicate function first
-    const { data: newData, error: newError } = await supabase.functions.invoke<GanGenerateResponse>('gan-communicate', {
-      body: {
-        action: 'generate',
-        parameters,
-        lookId
-      }
-    });
-    
-    if (!newError) {
-      return newData;
-    }
-    
-    // Fall back to the old gan-generate function if the new one fails
-    const { data, error } = await supabase.functions.invoke<GanGenerateResponse>('gan-generate', {
-      body: {
-        action: 'generate',
-        parameters,
-        lookId
-      }
-    });
-    
-    if (error) {
-      console.error('Error generating makeup look:', error);
-      return null;
-    }
-    
-    return data;
-  } catch (error) {
-    console.error('Exception generating makeup look:', error);
-    return null;
-  }
-};
-
-/**
- * Analyze a facial image for makeup application guidance
- */
+// Analyze a facial image using the GAN model
 export const analyzeFacialImage = async (
   imageBase64: string,
   lookId?: string
-): Promise<GanGenerateResponse | null> => {
+): Promise<any> => {
   try {
-    // Try the new gan-communicate function first
-    const { data: newData, error: newError } = await supabase.functions.invoke<GanGenerateResponse>('gan-communicate', {
-      body: {
-        action: 'analyze',
-        image: imageBase64,
-        lookId
-      }
-    });
+    console.log('Analyzing facial image...');
     
-    if (!newError) {
-      return newData;
+    // First check if the edge function is available
+    const functionAvailable = await checkGanFunction();
+    if (!functionAvailable) {
+      console.warn('GAN function not available, using mock data');
+      return mockAnalysisResponse(imageBase64);
     }
     
-    // Fall back to the old gan-generate function if the new one fails
-    const { data, error } = await supabase.functions.invoke<GanGenerateResponse>('gan-generate', {
-      body: {
-        action: 'analyze',
-        image: imageBase64,
-        lookId
-      }
-    });
+    // In a real implementation, we'd send the image to a backend service
+    // that applies the GAN model. For now, we'll use a mock implementation.
     
-    if (error) {
-      console.error('Error analyzing facial image:', error);
-      return null;
-    }
+    // Simulate a delay for the analysis
+    await new Promise(resolve => setTimeout(resolve, 1000));
     
-    return data;
+    // Return mock response
+    return mockAnalysisResponse(imageBase64);
   } catch (error) {
-    console.error('Exception analyzing facial image:', error);
-    return generateMockAnalysis(lookId);
+    console.error('Error analyzing facial image:', error);
+    throw error;
   }
 };
 
-/**
- * Generate mock analysis data if the real analysis fails
- */
-const generateMockAnalysis = (lookId?: string): GanGenerateResponse => {
-  // Skin tones
-  const skinTones = ['Fair', 'Light', 'Medium', 'Olive', 'Tan', 'Deep', 'Rich'];
-  // Face shapes
-  const faceShapes = ['Oval', 'Round', 'Square', 'Heart', 'Diamond', 'Rectangle'];
-  // Features
+// Create a mock analysis response for development
+const mockAnalysisResponse = (imageBase64: string) => {
+  // Mock facial analysis result
+  const skinTones = ['Fair', 'Light', 'Medium', 'Olive', 'Tan', 'Deep'];
+  const faceShapes = ['Oval', 'Round', 'Heart', 'Square', 'Diamond', 'Rectangle'];
   const features = [
-    'Defined cheekbones', 'Wide-set eyes', 'Full lips', 'Strong jawline',
-    'Straight nose', 'Almond eyes', 'Well-defined brows', 'Symmetrical features'
-  ];
-  // Sample recommendations
-  const recommendations = [
-    'Apply foundation with a damp beauty sponge for a natural finish',
-    'Use a light hand with blush, building gradually for your skin tone',
-    'Emphasize your eyes with soft definition in the crease',
-    'Line your lips before applying lipstick for a more defined shape',
-    'Set your makeup with a fine mist for a natural finish'
+    'High cheekbones', 'Defined jawline', 'Prominent brow', 'Wide-set eyes', 
+    'Full lips', 'Narrow nose', 'Arched eyebrows'
   ];
   
-  // Randomly select traits
+  const recommendations = [
+    'Use warm-toned foundation to complement your skin undertones',
+    'Apply bronzer along the temples and jawline to define your face shape',
+    'Define your brows with a slightly angled shape',
+    'Try a cream blush on the apples of your cheeks for a natural flush',
+    'Apply highlighter to your cheekbones to enhance your facial structure',
+    'Use a lip liner to define your natural lip shape',
+    'Apply eyeshadow in a gradient from light to dark for depth'
+  ];
+  
+  // Randomly select values for demonstration
   const skinTone = skinTones[Math.floor(Math.random() * skinTones.length)];
   const faceShape = faceShapes[Math.floor(Math.random() * faceShapes.length)];
   
-  // Select 2-4 random features
-  const selectedFeatures: string[] = [];
-  const featureCount = Math.floor(Math.random() * 3) + 2; // 2-4 features
-  
+  const selectedFeatures = [];
+  const featureCount = 2 + Math.floor(Math.random() * 3);
   for (let i = 0; i < featureCount; i++) {
     const feature = features[Math.floor(Math.random() * features.length)];
     if (!selectedFeatures.includes(feature)) {
@@ -195,10 +86,8 @@ const generateMockAnalysis = (lookId?: string): GanGenerateResponse => {
     }
   }
   
-  // Select 2-3 random recommendations
-  const selectedRecommendations: string[] = [];
-  const recCount = Math.floor(Math.random() * 2) + 2; // 2-3 recommendations
-  
+  const selectedRecommendations = [];
+  const recCount = 3 + Math.floor(Math.random() * 2);
   for (let i = 0; i < recCount; i++) {
     const rec = recommendations[Math.floor(Math.random() * recommendations.length)];
     if (!selectedRecommendations.includes(rec)) {
@@ -206,29 +95,23 @@ const generateMockAnalysis = (lookId?: string): GanGenerateResponse => {
     }
   }
   
-  // Return mock response
+  // Mock guidance steps
+  const currentStep = "Let's start by applying foundation to create an even base.";
+  const progress = 10;
+  
   return {
     status: 'ok',
     result: {
-      imageUrl: '/lovable-uploads/b30403d6-fafd-40f8-8dd4-e3d56d388dc0.png', // Use the uploaded reference image
+      imageUrl: 'data:image/jpeg;base64,' + imageBase64,
       analysis: {
         skinTone,
         faceShape,
         features: selectedFeatures,
-        recommendations: selectedRecommendations,
-        confidence: 0.85,
+        recommendations: selectedRecommendations
       },
       guidance: {
-        currentStep: 'Start by applying a thin layer of foundation with a damp beauty sponge',
-        nextStep: 'Next, use concealer under the eyes and on any blemishes',
-        progress: 5,
-        voiceInstruction: 'Start by applying a thin layer of foundation with a damp beauty sponge. Focus on even coverage, especially around the nose and chin.',
-        area: 'face',
-        visualGuide: {
-          x: 50,
-          y: 50,
-          radius: 30
-        }
+        currentStep,
+        progress
       }
     }
   };

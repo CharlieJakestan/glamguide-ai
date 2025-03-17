@@ -1,35 +1,67 @@
-
-// Enhanced face detection with better accuracy and performance
+// Enhanced face detection with better accuracy, performance and CDN fallback
 import * as faceapi from '@vladmandic/face-api';
 
 // Track model loading state
 let modelsLoaded = false;
 let modelLoadingPromise: Promise<boolean> | null = null;
+let modelLoadingAttempts = 0;
+const MAX_LOADING_ATTEMPTS = 3;
+const CDN_BASE_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model';
 
 // Store movement data for analysis
 const movementHistory: Array<{x: number, y: number, magnitude: number, timestamp: number}> = [];
 const MAX_HISTORY_LENGTH = 30;
 
-// Initialize the face detection models
+// Initialize the face detection models with CDN fallback
 export const initFaceDetection = async (timeout?: number): Promise<boolean> => {
   if (modelsLoaded) return true;
   if (modelLoadingPromise) return modelLoadingPromise;
 
   try {
     modelLoadingPromise = new Promise(async (resolve) => {
-      // Load models from public directory
-      await faceapi.nets.tinyFaceDetector.load('/models');
-      await faceapi.nets.faceLandmark68Net.load('/models');
-      await faceapi.nets.faceExpressionNet.load('/models');
-      
-      console.log('Face detection models loaded successfully');
-      modelsLoaded = true;
-      resolve(true);
+      try {
+        // First try to load from local path
+        console.log('Attempting to load face detection models from local path...');
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.load('/models'),
+          faceapi.nets.faceLandmark68Net.load('/models'),
+          faceapi.nets.faceExpressionNet.load('/models')
+        ]);
+        console.log('Face detection models loaded successfully from local path');
+        modelsLoaded = true;
+        resolve(true);
+      } catch (localError) {
+        console.warn('Failed to load models from local path, falling back to CDN:', localError);
+        
+        // If local loading fails, try CDN
+        try {
+          await Promise.all([
+            faceapi.nets.tinyFaceDetector.load(CDN_BASE_URL),
+            faceapi.nets.faceLandmark68Net.load(CDN_BASE_URL),
+            faceapi.nets.faceExpressionNet.load(CDN_BASE_URL)
+          ]);
+          console.log('Face detection models loaded successfully from CDN');
+          modelsLoaded = true;
+          resolve(true);
+        } catch (cdnError) {
+          console.error('Failed to load face detection models from CDN:', cdnError);
+          resolve(false);
+        }
+      }
     });
     
     return modelLoadingPromise;
   } catch (error) {
-    console.error('Failed to load face detection models:', error);
+    console.error('Critical failure in face detection initialization:', error);
+    modelLoadingAttempts++;
+    
+    // If we haven't exceeded max attempts, try again
+    if (modelLoadingAttempts < MAX_LOADING_ATTEMPTS) {
+      console.log(`Retrying face detection initialization (attempt ${modelLoadingAttempts + 1}/${MAX_LOADING_ATTEMPTS})...`);
+      modelLoadingPromise = null; // Reset promise so we can try again
+      return initFaceDetection(timeout);
+    }
+    
     return false;
   }
 };
@@ -56,13 +88,22 @@ export const getMovementTrends = (): {x: number, y: number, magnitude: number} =
 // Get the full movement history for AI learning
 export const getMovementHistory = () => [...movementHistory];
 
-// Detect facial landmarks with improved accuracy
+// Detect facial landmarks with improved error handling
 export const detectFacialLandmarks = async (
   videoElement: HTMLVideoElement
 ): Promise<faceapi.WithFaceLandmarks<{ detection: faceapi.FaceDetection }, faceapi.FaceLandmarks68> | null> => {
   if (!modelsLoaded) {
-    console.warn('Face detection models not loaded yet');
-    return null;
+    // If models aren't loaded yet, try loading them one more time
+    if (!modelLoadingPromise) {
+      const success = await initFaceDetection();
+      if (!success) {
+        console.warn('Failed to load face detection models');
+        return null;
+      }
+    } else {
+      console.warn('Face detection models still loading...');
+      return null;
+    }
   }
 
   try {
