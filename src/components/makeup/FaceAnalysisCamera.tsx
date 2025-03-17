@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Camera } from '@mediapipe/camera_utils';
 import { FaceMesh, Results, FACEMESH_TESSELATION } from '@mediapipe/face_mesh';
@@ -7,7 +8,7 @@ import LookProgressTracker from './LookProgressTracker';
 import LookDetailsPanel from './LookDetailsPanel';
 import FacialAnalysisDisplay from './FacialAnalysisDisplay';
 import VoiceGuidance from './VoiceGuidance';
-import { ReferenceLook, getReferenceLookById } from './services/lookReferenceService';
+import { ReferenceLook, getReferenceLookById } from '@/services/lookReferenceService';
 
 interface FaceAnalysisCameraProps {
   cameraActive: boolean;
@@ -547,7 +548,19 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
               personalizedRecommendations={localDetectedTraits?.recommendations}
             />
           )}
-          <FacialAnalysisDisplay detectedFacialTraits={localDetectedTraits} />
+          <FacialAnalysisDisplay 
+            detectedFacialTraits={localDetectedTraits} 
+            voiceEnabled={voiceEnabled}
+            analysisImage={analysisImage}
+            movementData={movementData}
+            lastActivity={lastActivity}
+            nearbyObjects={nearbyObjects?.map(obj => ({
+              type: obj.type,
+              position: obj.position,
+              confidence: 0.8  // Add default confidence for type compatibility
+            }))}
+            detectedMakeupTools={detectedMakeupTools}
+          />
         </div>
         <div>
           <VoiceGuidance
@@ -559,7 +572,11 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
             faceDetected={localFaceDetected}
             lastActivity={lastActivity}
             currentMakeupStep={getCurrentMakeupStep()}
-            detectedObjects={nearbyObjects}
+            detectedObjects={nearbyObjects?.map(obj => ({
+              type: obj.type,
+              position: obj.position,
+              confidence: 0.8  // Add default confidence for type compatibility
+            }))}
             movementData={movementData}
             detectedMakeupTools={detectedMakeupTools}
           />

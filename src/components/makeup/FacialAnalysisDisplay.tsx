@@ -15,11 +15,12 @@ interface FacialAnalysisDisplayProps {
     faceShape: string;
     features: string[];
     recommendations: string[];
+    skinType?: string;
   } | null;
   voiceEnabled: boolean;
   analysisImage: string | null;
   movementData?: { x: number; y: number; magnitude: number };
-  lastActivity?: string;
+  lastActivity?: string | null;
   onReanalyze?: () => void;
   isAnalyzing?: boolean;
   nearbyObjects?: DetectedObject[];
