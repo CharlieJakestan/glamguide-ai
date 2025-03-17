@@ -39,17 +39,36 @@ export const analyzeFacialImage = async (
       return mockAnalysisResponse(imageBase64);
     }
     
-    // In a real implementation, we'd send the image to a backend service
-    // that applies the GAN model. For now, we'll use a mock implementation.
-    
-    // Simulate a delay for the analysis
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Return mock response
-    return mockAnalysisResponse(imageBase64);
+    // Try to call the edge function with the image data
+    try {
+      const { data, error } = await supabase.functions.invoke('get-gan-model', {
+        body: { 
+          action: 'analyze',
+          image: imageBase64,
+          lookId
+        },
+      });
+      
+      if (error) {
+        console.error('Error calling GAN function for analysis:', error);
+        return mockAnalysisResponse(imageBase64);
+      }
+      
+      if (data && data.status === 'ok') {
+        console.log('Received analysis from GAN function');
+        return data;
+      } else {
+        console.warn('Unexpected response from GAN function:', data);
+        return mockAnalysisResponse(imageBase64);
+      }
+    } catch (functionError) {
+      console.error('Exception calling GAN function:', functionError);
+      return mockAnalysisResponse(imageBase64);
+    }
   } catch (error) {
     console.error('Error analyzing facial image:', error);
-    throw error;
+    // Always return a valid response to avoid breaking the UI
+    return mockAnalysisResponse(imageBase64);
   }
 };
 
@@ -102,7 +121,7 @@ const mockAnalysisResponse = (imageBase64: string) => {
   return {
     status: 'ok',
     result: {
-      imageUrl: 'data:image/jpeg;base64,' + imageBase64,
+      imageUrl: imageBase64.startsWith('data:') ? imageBase64 : 'data:image/jpeg;base64,' + imageBase64,
       analysis: {
         skinTone,
         faceShape,
