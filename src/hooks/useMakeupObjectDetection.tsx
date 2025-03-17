@@ -44,7 +44,14 @@ export const useMakeupObjectDetection = ({
         canvas.height = 10;
         
         // Test if detection can be initialized
-        const testResult = await detectMakeupTools(canvas, { x: 0, y: 0, width: 10, height: 10 });
+        // Pass an HTMLVideoElement or create a compatible object for testing
+        const mockVideoElement = {
+          videoWidth: 10,
+          videoHeight: 10
+        } as unknown as HTMLVideoElement;
+        
+        // Use the mock video element for testing instead of canvas
+        const testResult = await detectMakeupTools(mockVideoElement, { x: 0, y: 0, width: 10, height: 10 });
         
         // If we get here without error, setup is complete
         setSetupComplete(true);

@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { MakeupLook, MakeupProduct } from '@/types/makeup';
 import { 
   analyzeFaceMakeup, 
