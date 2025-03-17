@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from 'react';
 import { detectMakeupTools } from '@/lib/faceDetection';
 
@@ -22,6 +23,7 @@ export const useMakeupObjectDetection = ({
 }: UseMakeupObjectDetectionProps) => {
   const [detectedObjects, setDetectedObjects] = useState<DetectedObject[]>([]);
   const [isDetecting, setIsDetecting] = useState(false);
+  const [setupComplete, setSetupComplete] = useState(false);
   const detectionIntervalRef = useRef<number | null>(null);
   const lastDetectionTime = useRef<number>(0);
   
@@ -31,6 +33,30 @@ export const useMakeupObjectDetection = ({
     confidence: number;
     lastSeen: number;
   }>>([]);
+  
+  // Initialize detection setup
+  useEffect(() => {
+    const checkSetup = async () => {
+      try {
+        // Create a dummy canvas to test detection
+        const canvas = document.createElement('canvas');
+        canvas.width = 10;
+        canvas.height = 10;
+        
+        // Test if detection can be initialized
+        const testResult = await detectMakeupTools(canvas, { x: 0, y: 0, width: 10, height: 10 });
+        
+        // If we get here without error, setup is complete
+        setSetupComplete(true);
+        console.log('Makeup object detection initialized successfully');
+      } catch (error) {
+        console.error('Error initializing makeup object detection:', error);
+        setSetupComplete(false);
+      }
+    };
+    
+    checkSetup();
+  }, []);
   
   // Detect makeup objects near the face
   const detectObjects = async () => {
@@ -95,7 +121,7 @@ export const useMakeupObjectDetection = ({
   
   // Set up detection interval
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !setupComplete) {
       if (detectionIntervalRef.current) {
         window.clearInterval(detectionIntervalRef.current);
         detectionIntervalRef.current = null;
@@ -111,11 +137,12 @@ export const useMakeupObjectDetection = ({
         detectionIntervalRef.current = null;
       }
     };
-  }, [enabled, facePosition]);
+  }, [enabled, facePosition, setupComplete]);
   
   return {
     detectedObjects,
     isDetecting,
-    detectedMakeupTools
+    detectedMakeupTools,
+    setupComplete
   };
 };

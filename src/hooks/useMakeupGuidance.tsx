@@ -6,9 +6,10 @@ import {
   generateNextStepGuidance, 
   suggestProductSubstitutions,
   FaceAnalysisResult,
-  MakeupGuidance
+  MakeupGuidance,
+  sendFeedbackToAI
 } from '@/services/makeupAIService';
-import { speakInstruction, getApiKey } from '@/services/speechService';
+import { speakInstruction } from '@/services/speechService';
 
 interface UseMakeupGuidanceProps {
   isActive: boolean;
@@ -32,12 +33,41 @@ export const useMakeupGuidance = ({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisStep, setAnalysisStep] = useState(0);
   const [substitutions, setSubstitutions] = useState<Record<string, string[]>>({});
-  const [voiceEnabled, setVoiceEnabled] = useState(!!getApiKey());
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [region, setRegion] = useState<'usa' | 'korean' | 'indian' | 'european'>('usa');
+  const [setupComplete, setSetupComplete] = useState(false);
+  const [detectedTools, setDetectedTools] = useState<string[]>([]);
   
   const analysisPaused = useRef(false);
   const lastAnalysisTime = useRef(0);
   const analysisCycleTime = 5000; // Time between analysis cycles in ms
+  const voiceQueue = useRef<string[]>([]);
+  const isVoicePlaying = useRef(false);
+  
+  // Initialize and check setup status
+  useEffect(() => {
+    const checkSetup = async () => {
+      try {
+        // Test analysis, guidance and voice capabilities
+        const testAnalysis = await analyzeFaceMakeup(
+          new ImageData(1, 1), 
+          'test', 
+          'usa', 
+          0
+        );
+        
+        if (testAnalysis) {
+          console.log('Makeup analysis service initialized successfully');
+          setSetupComplete(true);
+        }
+      } catch (error) {
+        console.error('Failed to initialize makeup guidance services:', error);
+        setSetupComplete(false);
+      }
+    };
+    
+    checkSetup();
+  }, []);
   
   // Update region based on the look's description or name
   useEffect(() => {
@@ -77,6 +107,42 @@ export const useMakeupGuidance = ({
     setSubstitutions(subs);
   }, [currentLook, availableProducts]);
   
+  // Process voice queue
+  useEffect(() => {
+    const processVoiceQueue = async () => {
+      if (!voiceEnabled || isVoicePlaying.current || voiceQueue.current.length === 0) {
+        return;
+      }
+      
+      const instruction = voiceQueue.current.shift();
+      if (instruction) {
+        isVoicePlaying.current = true;
+        await speakInstruction(instruction);
+        isVoicePlaying.current = false;
+        
+        // Process next item in queue after a small delay
+        setTimeout(processVoiceQueue, 500);
+      }
+    };
+    
+    processVoiceQueue();
+    
+    const interval = setInterval(processVoiceQueue, 1000);
+    return () => clearInterval(interval);
+  }, [voiceEnabled]);
+  
+  // Add instruction to voice queue
+  const queueVoiceInstruction = (instruction: string) => {
+    if (!instruction) return;
+    
+    // Don't add duplicate instructions
+    if (voiceQueue.current.includes(instruction)) {
+      return;
+    }
+    
+    voiceQueue.current.push(instruction);
+  };
+  
   const runAnalysisCycle = async () => {
     if (!isActive || !faceDetected || !videoRef.current || !canvasRef.current || !currentLook || analysisPaused.current) {
       return;
@@ -109,7 +175,8 @@ export const useMakeupGuidance = ({
         imageData, 
         currentLook.name || 'default', 
         region,
-        analysisStep
+        analysisStep,
+        detectedTools
       );
       
       setAnalysisResult(analysis);
@@ -126,11 +193,24 @@ export const useMakeupGuidance = ({
       
       setCurrentGuidance(guidance);
       
-      // Speak the guidance if voice is enabled
+      // Queue voice guidance if enabled
       if (voiceEnabled && guidance) {
         analysisPaused.current = true;
-        await speakInstruction(guidance.voiceInstruction);
-        analysisPaused.current = false;
+        queueVoiceInstruction(guidance.voiceInstruction);
+        
+        // Allow next analysis after a short delay
+        setTimeout(() => {
+          analysisPaused.current = false;
+        }, 5000);
+      }
+      
+      // Send feedback to improve AI
+      if (analysisStep % 5 === 0 && currentLook.id) {
+        sendFeedbackToAI(
+          currentLook.id,
+          `Auto feedback: Analysis cycle ${analysisStep}, detected tools: ${detectedTools.join(', ')}`,
+          true
+        );
       }
     } catch (error) {
       console.error('Error in makeup analysis cycle:', error);
@@ -148,7 +228,12 @@ export const useMakeupGuidance = ({
     return () => {
       clearInterval(intervalId);
     };
-  }, [isActive, faceDetected, currentLook, availableProducts, voiceEnabled, region]);
+  }, [isActive, faceDetected, currentLook, availableProducts, voiceEnabled, region, detectedTools]);
+  
+  // Update detected tools based on external input
+  const updateDetectedTools = useCallback((tools: string[]) => {
+    setDetectedTools(tools);
+  }, []);
   
   const toggleVoiceGuidance = () => {
     setVoiceEnabled(prev => !prev);
@@ -158,6 +243,7 @@ export const useMakeupGuidance = ({
     setAnalysisStep(0);
     setAnalysisResult(null);
     setCurrentGuidance(null);
+    voiceQueue.current = [];
   };
   
   return {
@@ -170,6 +256,9 @@ export const useMakeupGuidance = ({
     resetAnalysis,
     region,
     setRegion,
-    setVoiceEnabled
+    setVoiceEnabled,
+    setupComplete,
+    updateDetectedTools,
+    queueVoiceInstruction
   };
 };
