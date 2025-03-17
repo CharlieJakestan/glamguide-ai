@@ -24,7 +24,7 @@ const modelCache: Record<string, GanModel> = {};
  * Get GAN model from Supabase storage using the Edge Function
  * This uses the hardcoded file list approach to avoid the list() method issue
  */
-export const getGanModel = async (style: string = 'casual_day'): Promise<GanModel | null> {
+export const getGanModel = async (style: string = 'casual_day'): Promise<GanModel | null> => {
   try {
     // Check cache first
     if (modelCache[style]) {
@@ -64,7 +64,7 @@ export const getGanModel = async (style: string = 'casual_day'): Promise<GanMode
     console.error('Error in getGanModel:', err);
     return null;
   }
-}
+};
 
 /**
  * Generate makeup using the GAN model
@@ -74,7 +74,7 @@ export const getGanModel = async (style: string = 'casual_day'): Promise<GanMode
 export const generateMakeupLook = async (
   faceImageData: string,
   style: string = 'casual_day'
-): Promise<GanPredictionResult | null> {
+): Promise<GanPredictionResult | null> => {
   try {
     // First get the GAN model
     const model = await getGanModel(style);
@@ -124,4 +124,4 @@ export const generateMakeupLook = async (
     console.error('Error in generateMakeupLook:', err);
     return null;
   }
-}
+};
