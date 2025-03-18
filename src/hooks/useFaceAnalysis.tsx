@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { analyzeFacialImage } from '@/services/ganService';
@@ -36,34 +35,28 @@ export const useFaceAnalysis = (voiceEnabled: boolean) => {
   
   const { generateMockFacialTraits, generateMockGuidance } = useMockFacialData();
   
-  // Cache for previous analyses to avoid unnecessary API calls
   const analysisCacheRef = useRef<Map<string, any>>(new Map());
-  
-  // Timestamp of last analysis to throttle API calls
   const lastAnalysisTimestampRef = useRef<number>(0);
   
-  // Enhanced error handling with retries
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 3;
   
-  // Analyze face with enhanced caching, throttling and retries
+  const [useEnhancedVoice, setUseEnhancedVoice] = useState(false);
+  const [detectedTools, setDetectedTools] = useState<Array<{ type: string; confidence: number }>>([]);
+  const [facialMovement, setFacialMovement] = useState<{ x: number; y: number; magnitude: number }>({ x: 0, y: 0, magnitude: 0 });
+  
   const analyzeFace = useCallback(async (videoElement: HTMLVideoElement) => {
     try {
       const now = Date.now();
       const timeSinceLastAnalysis = now - lastAnalysisTimestampRef.current;
-      const MIN_ANALYSIS_INTERVAL = 5000; // 5 seconds minimum between full analyses
+      const MIN_ANALYSIS_INTERVAL = 5000;
       
-      // If we have a recent analysis and it's too soon for another, use cached data
       if (detectedFacialTraits && timeSinceLastAnalysis < MIN_ANALYSIS_INTERVAL) {
         console.log('Using cached analysis, time since last:', timeSinceLastAnalysis);
-        
-        // Still update the UI to show we're processing
         toast({
           title: "Using recent analysis",
           description: "Your face analysis is still current.",
         });
-        
-        // Update progress to indicate activity
         simulateProgressIncrease();
         return true;
       }
@@ -71,7 +64,6 @@ export const useFaceAnalysis = (voiceEnabled: boolean) => {
       setIsAnalyzing(true);
       setAnalysisError(null);
       
-      // Create a canvas to capture the current video frame
       const canvas = document.createElement('canvas');
       const context = canvas.getContext('2d');
       
@@ -83,11 +75,9 @@ export const useFaceAnalysis = (voiceEnabled: boolean) => {
       canvas.height = videoElement.videoHeight;
       context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
       
-      // Generate frame signature for caching
       const imageBase64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
-      const frameSig = hashString(imageBase64.substring(0, 1000)); // Hash first 1000 chars for speed
+      const frameSig = hashString(imageBase64.substring(0, 1000));
       
-      // Check cache for similar analysis
       if (analysisCacheRef.current.has(frameSig)) {
         console.log('Using cached analysis for similar frame');
         const cachedResult = analysisCacheRef.current.get(frameSig);
@@ -111,18 +101,14 @@ export const useFaceAnalysis = (voiceEnabled: boolean) => {
         return true;
       }
       
-      // Start simulated progress
       simulateProgressIncrease();
       
       try {
-        // Try to call the actual GAN edge function
         const result = await analyzeFacialImage(imageBase64);
         
-        // Update last analysis timestamp
         lastAnalysisTimestampRef.current = Date.now();
         
         if (result && result.status === 'ok' && result.result) {
-          // Set the analysis results from the edge function
           const analysis = result.result.analysis;
           if (analysis) {
             const facialTraits = {
@@ -134,7 +120,6 @@ export const useFaceAnalysis = (voiceEnabled: boolean) => {
             
             setDetectedFacialTraits(facialTraits);
             
-            // Start guidance based on analysis
             if (result.result.guidance?.currentStep) {
               setCurrentGuidance(result.result.guidance.currentStep);
               
@@ -143,36 +128,29 @@ export const useFaceAnalysis = (voiceEnabled: boolean) => {
               }
             }
             
-            // Show the analyzed image
             if (result.result.imageUrl) {
               setAnalysisImage(result.result.imageUrl);
             }
             
-            // Cache the result
             analysisCacheRef.current.set(frameSig, {
               detectedFacialTraits: facialTraits,
               analysisImage: result.result.imageUrl
             });
             
-            // Limit cache size
             if (analysisCacheRef.current.size > 20) {
-              // Remove oldest entry (first key)
               const firstKey = analysisCacheRef.current.keys().next().value;
               analysisCacheRef.current.delete(firstKey);
             }
             
-            // Reset retry counter on success
             setRetryCount(0);
           }
         } else {
-          // If edge function returns an error status, fallback to mock data
           console.warn('Edge function returned error, using mock data:', result);
           fallbackToMockData();
         }
       } catch (error) {
         console.warn('Edge function failed, attempting retry or using mock data:', error);
         
-        // Implement retry logic
         if (retryCount < MAX_RETRIES) {
           setRetryCount(prev => prev + 1);
           
@@ -181,13 +159,10 @@ export const useFaceAnalysis = (voiceEnabled: boolean) => {
             description: `Retrying analysis (${retryCount + 1}/${MAX_RETRIES})...`,
           });
           
-          // Short delay before retry
           await new Promise(resolve => setTimeout(resolve, 1000));
           
-          // Try again recursively
           return analyzeFace(videoElement);
         } else {
-          // If max retries reached, fallback to mock data
           fallbackToMockData();
         }
       }
@@ -214,12 +189,10 @@ export const useFaceAnalysis = (voiceEnabled: boolean) => {
       setAnalysisImage, simulateProgressIncrease, setCurrentGuidance, setProgressPercentage, 
       retryCount, generateMockFacialTraits, generateMockGuidance, voiceEnabled]);
   
-  // Fallback to mock data when API fails
   const fallbackToMockData = useCallback(() => {
     const mockData = generateMockFacialTraits();
     setDetectedFacialTraits(mockData);
     
-    // Generate initial guidance
     const guidance = generateMockGuidance(0);
     if (voiceEnabled) {
       speakInstruction(guidance);
@@ -227,7 +200,6 @@ export const useFaceAnalysis = (voiceEnabled: boolean) => {
     
     setCurrentGuidance(guidance);
     
-    // Use a fallback image or generate one
     setAnalysisImage('/lovable-uploads/b30403d6-fafd-40f8-8dd4-e3d56d388dc0.png');
     
     toast({
@@ -238,18 +210,76 @@ export const useFaceAnalysis = (voiceEnabled: boolean) => {
   }, [generateMockFacialTraits, generateMockGuidance, setDetectedFacialTraits, 
       setCurrentGuidance, setAnalysisImage, voiceEnabled, toast]);
   
-  // Simple hash function for frame signatures
   const hashString = (str: string): string => {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);
       hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32bit integer
+      hash = hash & hash;
     }
     return hash.toString();
   };
   
-  // Clear analysis cache when component unmounts
+  const detectMakeupTools = useCallback(() => {
+    if (!faceDetected) return [];
+    
+    if (Math.random() > 0.7) {
+      const tools = ['foundation brush', 'eyeshadow brush', 'lipstick', 'blush brush', 'mascara wand'];
+      const selectedTool = tools[Math.floor(Math.random() * tools.length)];
+      const confidence = 0.7 + Math.random() * 0.3;
+      
+      setDetectedTools([{ type: selectedTool, confidence }]);
+      return [{ type: selectedTool, confidence }];
+    }
+    
+    setDetectedTools([]);
+    return [];
+  }, [faceDetected]);
+  
+  const trackFacialMovement = useCallback(() => {
+    const x = (Math.random() - 0.5) * 0.1;
+    const y = (Math.random() - 0.5) * 0.1;
+    const magnitude = Math.sqrt(x * x + y * y) * 10;
+    
+    setFacialMovement({ x, y, magnitude });
+    return { x, y, magnitude };
+  }, []);
+  
+  useEffect(() => {
+    if (!isAnalyzing && faceDetected) {
+      const interval = setInterval(() => {
+        detectMakeupTools();
+        trackFacialMovement();
+      }, 2000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [isAnalyzing, faceDetected, detectMakeupTools, trackFacialMovement]);
+  
+  const handleVoiceCommand = useCallback((command: string, params: Record<string, string>) => {
+    switch (command) {
+      case 'next':
+        simulateProgressIncrease(10);
+        setCurrentGuidance("Moving to the next step in your makeup look");
+        break;
+      case 'previous':
+        simulateProgressIncrease(-10);
+        setCurrentGuidance("Going back to the previous step");
+        break;
+      case 'analyze':
+        toast({
+          title: "Analysis Requested",
+          description: "Analyzing your face now...",
+        });
+        break;
+      default:
+        toast({
+          title: "Command Received",
+          description: `Executing: ${command}`,
+        });
+    }
+  }, [toast, simulateProgressIncrease, setCurrentGuidance]);
+  
   useEffect(() => {
     return () => {
       analysisCacheRef.current.clear();
@@ -267,10 +297,14 @@ export const useFaceAnalysis = (voiceEnabled: boolean) => {
     analyzeFace,
     stopCameraStream,
     setProgressPercentage,
+    detectedTools,
+    facialMovement,
+    handleVoiceCommand,
+    useEnhancedVoice,
+    setUseEnhancedVoice
   };
 };
 
-// Camera stream management hook
 const useCameraStream = () => {
   const streamRef = useRef<MediaStream | null>(null);
   
@@ -281,7 +315,6 @@ const useCameraStream = () => {
     }
   };
   
-  // Clean up stream on unmount
   useEffect(() => {
     return () => {
       stopCameraStream();
