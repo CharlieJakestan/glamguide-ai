@@ -145,6 +145,7 @@ export const useFaceAnalysis = (voiceEnabled: boolean) => {
             }
             
             setRetryCount(0);
+            setFaceDetected(true);
           }
         } else {
           console.warn('Edge function returned error, using mock data:', result);
@@ -195,7 +196,7 @@ export const useFaceAnalysis = (voiceEnabled: boolean) => {
     const mockData = generateMockFacialTraits();
     setDetectedFacialTraits(mockData);
     
-    // Fix #1: Pass the current progress percentage to generateMockGuidance
+    // Pass the current progress percentage to generateMockGuidance
     const currentProgress = progressPercentage;
     const guidance = generateMockGuidance(currentProgress);
     if (voiceEnabled) {
@@ -205,6 +206,7 @@ export const useFaceAnalysis = (voiceEnabled: boolean) => {
     setCurrentGuidance(guidance);
     
     setAnalysisImage('/lovable-uploads/b30403d6-fafd-40f8-8dd4-e3d56d388dc0.png');
+    setFaceDetected(true); // Ensure face is marked as detected in fallback mode
     
     toast({
       title: "Using Fallback Analysis",
@@ -263,13 +265,10 @@ export const useFaceAnalysis = (voiceEnabled: boolean) => {
   const handleVoiceCommand = useCallback((command: string, params: Record<string, string>) => {
     switch (command) {
       case 'next':
-        // Fix #2: Don't pass any arguments to simulateProgressIncrease if it doesn't accept any
-        // Check the implementation in useAnalysisProgress
         simulateProgressIncrease();
         setCurrentGuidance("Moving to the next step in your makeup look");
         break;
       case 'previous':
-        // Fix #3: Don't pass any arguments to simulateProgressIncrease if it doesn't accept any
         simulateProgressIncrease();
         setCurrentGuidance("Going back to the previous step");
         break;

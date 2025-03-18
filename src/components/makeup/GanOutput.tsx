@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Loader2, AlertCircle, Check, Info, RefreshCw } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -19,6 +18,7 @@ interface GanOutputProps {
   progressPercentage?: number;
   faceDetected?: boolean;
   facePosition?: { x: number; y: number; width: number; height: number } | null;
+  enableARPreview?: boolean;
 }
 
 const GanOutput: React.FC<GanOutputProps> = ({
@@ -30,15 +30,16 @@ const GanOutput: React.FC<GanOutputProps> = ({
   onRegenerate,
   progressPercentage = 0,
   faceDetected = false,
-  facePosition = null
+  facePosition = null,
+  enableARPreview = false
 }) => {
   const [loaded, setLoaded] = useState(false);
   const [fadeIn, setFadeIn] = useState(false);
   const [animatedProgress, setAnimatedProgress] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
-  
-  // Reset state when a new image is loading
+  const [arPreviewActive, setArPreviewActive] = useState(false);
+
   useEffect(() => {
     if (isLoading) {
       setLoaded(false);
@@ -46,8 +47,7 @@ const GanOutput: React.FC<GanOutputProps> = ({
       setAnimatedProgress(0);
     }
   }, [isLoading]);
-  
-  // Animate progress bar for better UX
+
   useEffect(() => {
     if (isLoading && animatedProgress < 95) {
       const timer = setTimeout(() => {
@@ -58,8 +58,7 @@ const GanOutput: React.FC<GanOutputProps> = ({
       setAnimatedProgress(100);
     }
   }, [isLoading, animatedProgress]);
-  
-  // Trigger fade-in animation once image loads
+
   useEffect(() => {
     if (loaded && !fadeIn) {
       const timer = setTimeout(() => {
@@ -68,39 +67,40 @@ const GanOutput: React.FC<GanOutputProps> = ({
       return () => clearTimeout(timer);
     }
   }, [loaded, fadeIn]);
-  
-  // Use actual progress if provided, otherwise use animated progress
-  const displayProgress = progressPercentage > 0 ? progressPercentage : animatedProgress;
-  
+
   const handleImageLoad = () => {
     setLoaded(true);
   };
 
-  // Draw facial tracking overlay when face is detected
+  useEffect(() => {
+    if (enableARPreview && loaded && faceDetected && imageUrl) {
+      setArPreviewActive(true);
+    } else {
+      setArPreviewActive(false);
+    }
+  }, [enableARPreview, loaded, faceDetected, imageUrl]);
+
+  const displayProgress = progressPercentage > 0 ? progressPercentage : animatedProgress;
+
   useEffect(() => {
     if (loaded && faceDetected && facePosition && canvasRef.current && imageRef.current) {
       const canvas = canvasRef.current;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      // Set canvas size to match image
       canvas.width = imageRef.current.width;
       canvas.height = imageRef.current.height;
 
-      // Clear previous drawings
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Draw facial tracking elements
-      const scaleX = canvas.width / 100; // Assuming facePosition is in percentages
+      const scaleX = canvas.width / 100;
       const scaleY = canvas.height / 100;
 
-      // Draw face outline
       const x = facePosition.x * scaleX;
       const y = facePosition.y * scaleY;
       const width = facePosition.width * scaleX;
       const height = facePosition.height * scaleY;
       
-      // Draw pulsating circle around face
       const pulseAmount = 0.05;
       const pulseSpeed = 0.003;
       const pulseScale = 1 + Math.sin(Date.now() * pulseSpeed) * pulseAmount;
@@ -117,7 +117,6 @@ const GanOutput: React.FC<GanOutputProps> = ({
       ctx.lineWidth = 3;
       ctx.stroke();
       
-      // Draw crosshair at center
       const centerX = x + width/2;
       const centerY = y + height/2;
       const crosshairSize = width * 0.1;
@@ -132,7 +131,7 @@ const GanOutput: React.FC<GanOutputProps> = ({
       ctx.stroke();
     }
   }, [loaded, faceDetected, facePosition]);
-  
+
   if (error) {
     return (
       <div className={`bg-red-50 rounded-lg p-4 border border-red-200 ${className}`}>
@@ -155,10 +154,9 @@ const GanOutput: React.FC<GanOutputProps> = ({
       </div>
     );
   }
-  
+
   return (
     <div className={`relative bg-gray-100 rounded-lg overflow-hidden ${className}`}>
-      {/* Progress bar overlay */}
       {(isLoading || !loaded) && (
         <div className="absolute inset-0 bg-gray-200/60 backdrop-blur-sm flex flex-col items-center justify-center z-10">
           <Loader2 className="h-8 w-8 text-purple-600 animate-spin mb-2" />
@@ -174,7 +172,6 @@ const GanOutput: React.FC<GanOutputProps> = ({
         </div>
       )}
       
-      {/* Image container */}
       {imageUrl && (
         <div 
           className={`w-full h-full transition-opacity duration-300 ${fadeIn ? 'opacity-100' : 'opacity-0'}`}
@@ -187,13 +184,18 @@ const GanOutput: React.FC<GanOutputProps> = ({
             onLoad={handleImageLoad}
           />
           
-          {/* Canvas overlay for face tracking visualization */}
           <canvas 
             ref={canvasRef}
             className="absolute inset-0 w-full h-full pointer-events-none"
           />
           
-          {/* Face detection indicator */}
+          {arPreviewActive && (
+            <div className="absolute top-2 left-2 bg-purple-600/80 backdrop-blur-sm text-white text-xs rounded-full px-3 py-1 flex items-center">
+              <span className="animate-pulse mr-1">●</span>
+              AR Preview Active
+            </div>
+          )}
+          
           {!isLoading && loaded && (
             <div className="absolute bottom-2 left-2 right-2 pointer-events-none">
               <div className="bg-black/40 backdrop-blur-sm text-white text-xs rounded px-2 py-1 flex items-center justify-between">
@@ -206,7 +208,6 @@ const GanOutput: React.FC<GanOutputProps> = ({
                   <span>Face {faceDetected ? 'detected' : 'not detected'}</span>
                 </div>
                 
-                {/* Regenerate button */}
                 {onRegenerate && (
                   <button 
                     onClick={onRegenerate}
@@ -219,7 +220,6 @@ const GanOutput: React.FC<GanOutputProps> = ({
             </div>
           )}
           
-          {/* Display facial analysis if available */}
           {facialAnalysis && loaded && !isLoading && (
             <div className="absolute top-2 right-2 left-2 pointer-events-none">
               <div className="bg-black/40 backdrop-blur-sm rounded p-2 flex flex-wrap gap-1">
@@ -250,7 +250,6 @@ const GanOutput: React.FC<GanOutputProps> = ({
         </div>
       )}
       
-      {/* Empty state */}
       {!imageUrl && !isLoading && (
         <div className="w-full h-full flex items-center justify-center">
           <p className="text-gray-500">No image generated yet</p>

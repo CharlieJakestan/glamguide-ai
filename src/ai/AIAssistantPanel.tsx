@@ -1,13 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { BadgeInfo, Lightbulb, Camera, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Mic, MicOff, Volume2, VolumeX, ArrowRight, ThumbsUp, ThumbsDown, BrainCircuit } from 'lucide-react';
-import AI3DAvatar from './avatar/AI3DAvatar';
-import VoiceAssistant from './voice/VoiceAssistant';
-import { generateAndSpeakResponse } from '@/services/enhancedSpeechService';
+import ImprovedConversationalAI from './ImprovedConversationalAI';
 
 interface AIAssistantPanelProps {
   faceDetected: boolean;
@@ -30,216 +28,171 @@ const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
   movementData = { x: 0, y: 0, magnitude: 0 },
   onExecuteCommand
 }) => {
-  const [voiceEnabled, setVoiceEnabled] = useState(true);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [activeTab, setActiveTab] = useState('assistant');
-  const [avatarMood, setAvatarMood] = useState<'neutral' | 'happy' | 'thinking' | 'concerned'>('neutral');
-  const [assistantMessages, setAssistantMessages] = useState<Array<{ text: string; timestamp: number }>>([]);
+  const [insights, setInsights] = useState<string[]>([]);
+  const [showConversational, setShowConversational] = useState(true);
   
-  // Set avatar mood based on face detection and current state
+  // Generate dynamic insights based on detected data
   useEffect(() => {
-    if (!faceDetected) {
-      setAvatarMood('concerned');
-    } else if (isSpeaking) {
-      setAvatarMood('happy');
-    } else if (detectedTools.length > 0) {
-      setAvatarMood('thinking');
-    } else {
-      setAvatarMood('neutral');
-    }
-  }, [faceDetected, isSpeaking, detectedTools]);
-  
-  // Toggle voice guidance
-  const toggleVoiceGuidance = () => {
-    setVoiceEnabled(prev => !prev);
-  };
-  
-  // Handle command execution
-  const handleCommandExecution = async (command: string, params: Record<string, string>) => {
-    console.log('Executing command:', command, params);
+    if (!facialTraits) return;
     
-    // Add response to messages
-    let response = '';
+    const newInsights = [];
     
-    switch (command) {
-      case 'next':
-        response = 'Moving to the next step.';
-        break;
-      case 'previous':
-        response = 'Going back to the previous step.';
-        break;
-      case 'repeat':
-        response = `Let me repeat that. ${currentStep}`;
-        break;
-      case 'help':
-        response = 'I can guide you through your makeup application. Try asking about specific products or techniques.';
-        break;
-      case 'product':
-        if (params.product) {
-          response = await generateAndSpeakResponse(
-            `Tell me about ${params.product}`,
-            facialTraits,
-            detectedTools.map(t => t.type),
-            currentStep,
-            faceDetected
-          );
-        } else {
-          response = 'What product would you like to know about?';
-        }
-        break;
-      case 'query':
-        if (params.text) {
-          response = await generateAndSpeakResponse(
-            params.text,
-            facialTraits,
-            detectedTools.map(t => t.type),
-            currentStep,
-            faceDetected
-          );
-        } else {
-          response = 'I didn\'t catch that. Could you please repeat?';
-        }
-        break;
-      default:
-        response = 'I\'m not sure how to help with that. Try asking about makeup techniques or products.';
+    if (facialTraits.skinTone) {
+      newInsights.push(`Your ${facialTraits.skinTone} skin tone would benefit from ${getSkinToneRecommendation(facialTraits.skinTone)}.`);
     }
     
-    // Add response to messages
-    addAssistantMessage(response);
-    
-    // Execute the command if handler is provided
-    if (onExecuteCommand) {
-      onExecuteCommand(command, params);
+    if (facialTraits.faceShape) {
+      newInsights.push(`For your ${facialTraits.faceShape} face shape, try ${getFaceShapeRecommendation(facialTraits.faceShape)}.`);
     }
     
-    // Speak the response
-    if (voiceEnabled) {
-      setIsSpeaking(true);
-      await new Promise(resolve => setTimeout(resolve, response.length * 50));
-      setIsSpeaking(false);
+    if (facialTraits.features && facialTraits.features.length > 0) {
+      const feature = facialTraits.features[0];
+      newInsights.push(`To enhance your ${feature}, consider ${getFeatureRecommendation(feature)}.`);
     }
-  };
-  
-  // Add assistant message to history
-  const addAssistantMessage = (text: string) => {
-    setAssistantMessages(prev => [
-      ...prev,
-      { text, timestamp: Date.now() }
-    ].slice(-5)); // Keep only the last 5 messages
-  };
+    
+    if (detectedTools.length > 0) {
+      const tool = detectedTools[0].type;
+      newInsights.push(`I noticed you're using ${tool}. For best results, ${getToolTip(tool)}.`);
+    }
+    
+    if (newInsights.length > 0) {
+      setInsights(newInsights);
+    }
+  }, [facialTraits, detectedTools]);
   
   return (
-    <Card className="bg-gradient-to-br from-purple-50 to-blue-50 border-purple-200">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold text-purple-800 flex items-center">
-            <BrainCircuit className="h-5 w-5 mr-2 text-purple-600" />
-            AI Makeup Assistant
-          </CardTitle>
-          <Badge 
-            variant={faceDetected ? "default" : "destructive"}
-            className={`${faceDetected ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
-          >
-            {faceDetected ? 'Face Detected' : 'No Face Detected'}
-          </Badge>
-        </div>
-      </CardHeader>
+    <div className="space-y-4">
+      {!faceDetected && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            No face detected. Please position your face in the camera view for personalized guidance.
+          </AlertDescription>
+        </Alert>
+      )}
       
-      <CardContent>
-        <div className="mb-4 flex justify-center">
-          <AI3DAvatar
-            isSpeaking={isSpeaking}
-            mood={avatarMood}
-            size="medium"
-            colorTheme="purple"
-          />
-        </div>
-        
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-4">
-          <TabsList className="grid grid-cols-2 mb-2">
-            <TabsTrigger value="assistant">Voice Assistant</TabsTrigger>
-            <TabsTrigger value="analysis">Analysis & Tips</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="assistant" className="space-y-4">
-            <VoiceAssistant
-              enabled={voiceEnabled}
-              onToggle={toggleVoiceGuidance}
-              faceDetected={faceDetected}
-              currentStep={currentStep}
-              onExecuteCommand={handleCommandExecution}
-              detectedTools={detectedTools}
-              movementData={movementData}
-            />
-          </TabsContent>
-          
-          <TabsContent value="analysis" className="space-y-4">
-            <div className="bg-white rounded-lg p-3 shadow-sm">
-              <h4 className="text-sm font-medium text-purple-700 mb-2">Face Analysis</h4>
-              <div className="space-y-1.5">
-                <p className="text-xs text-gray-600">
-                  <span className="font-medium">Skin Tone:</span> {facialTraits?.skinTone || 'Not detected'}
-                </p>
-                <p className="text-xs text-gray-600">
-                  <span className="font-medium">Face Shape:</span> {facialTraits?.faceShape || 'Not detected'}
-                </p>
-                {facialTraits?.features && facialTraits.features.length > 0 && (
-                  <p className="text-xs text-gray-600">
-                    <span className="font-medium">Features:</span>{' '}
-                    {facialTraits.features.join(', ')}
-                  </p>
-                )}
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-lg p-3 shadow-sm">
-              <h4 className="text-sm font-medium text-purple-700 mb-2">Makeup Progress</h4>
-              <p className="text-xs text-gray-600 mb-2">
-                <span className="font-medium">Current Step:</span> {currentStep || 'Not started'}
-              </p>
-              {detectedTools.length > 0 && (
-                <div className="mt-2">
-                  <p className="text-xs font-medium text-gray-600 mb-1">Detected Tools:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {detectedTools.map((tool, index) => (
-                      <Badge key={index} variant="outline" className="text-xs">
-                        {tool.type} ({Math.round(tool.confidence * 100)}%)
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            <div className="flex justify-end space-x-2">
-              <Button size="sm" variant="outline" className="text-xs">
-                <ThumbsDown className="h-3 w-3 mr-1" />
-                Incorrect
-              </Button>
-              <Button size="sm" variant="outline" className="text-xs bg-green-50 text-green-600 border-green-200">
-                <ThumbsUp className="h-3 w-3 mr-1" />
-                Helpful
-              </Button>
-            </div>
-          </TabsContent>
-        </Tabs>
-        
-        {assistantMessages.length > 0 && (
-          <div className="mt-4 bg-white p-3 rounded-lg shadow-sm max-h-40 overflow-y-auto">
-            <h4 className="text-xs font-medium text-gray-500 mb-2">Recent Responses</h4>
-            <div className="space-y-2">
-              {assistantMessages.map((msg, index) => (
-                <div key={index} className="text-sm text-gray-700 flex items-start space-x-2">
-                  <ArrowRight className="h-3 w-3 text-purple-400 mt-1 flex-shrink-0" />
-                  <p>{msg.text}</p>
-                </div>
-              ))}
-            </div>
+      {faceDetected && insights.length > 0 && (
+        <Card className="p-3 bg-indigo-50 border-indigo-200">
+          <div className="flex items-center mb-2">
+            <BadgeInfo className="h-4 w-4 text-indigo-500 mr-2" />
+            <h3 className="text-indigo-700 font-medium">AI Beauty Insights</h3>
           </div>
-        )}
-      </CardContent>
-    </Card>
+          <ul className="space-y-2">
+            {insights.map((insight, index) => (
+              <li key={index} className="flex items-start">
+                <Lightbulb className="h-4 w-4 text-amber-500 mt-0.5 mr-2 flex-shrink-0" />
+                <span className="text-indigo-800 text-sm">{insight}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+      
+      {/* Activity detection */}
+      {movementData.magnitude > 0 && (
+        <div className="flex items-center justify-between">
+          <Badge variant="outline" className="bg-blue-50 text-blue-700">
+            <Zap className="h-3 w-3 mr-1" /> 
+            {movementData.magnitude > 5 
+              ? "High activity detected" 
+              : "Light movement detected"}
+          </Badge>
+          
+          {currentStep && (
+            <Badge className="bg-purple-100 text-purple-700">
+              Current step: {currentStep.split(' ').slice(0, 3).join(' ')}...
+            </Badge>
+          )}
+        </div>
+      )}
+      
+      {/* Improved Conversational AI component */}
+      {showConversational ? (
+        <ImprovedConversationalAI 
+          facialTraits={facialTraits}
+          currentStep={currentStep}
+          faceDetected={faceDetected}
+          detectedTools={detectedTools}
+          movementData={movementData}
+          onExecuteCommand={onExecuteCommand}
+        />
+      ) : (
+        <Button 
+          onClick={() => setShowConversational(true)}
+          className="w-full bg-purple-100 text-purple-700 hover:bg-purple-200"
+        >
+          <Camera className="h-4 w-4 mr-2" />
+          Start AI Conversation
+        </Button>
+      )}
+    </div>
   );
+};
+
+// Helper functions for providing recommendations
+const getSkinToneRecommendation = (skinTone: string): string => {
+  switch (skinTone.toLowerCase()) {
+    case 'fair':
+      return 'foundations with neutral undertones and soft blush colors';
+    case 'light':
+      return 'light to medium coverage products with peachy or pink undertones';
+    case 'medium':
+      return 'golden or warm-toned products that enhance your natural glow';
+    case 'olive':
+      return 'products with warm golden or yellow undertones to complement your complexion';
+    case 'tan':
+      return 'rich, warm colors that enhance your natural warmth';
+    case 'deep':
+      return 'high-pigment products with red or orange undertones for rich definition';
+    default:
+      return 'products that complement your natural undertones';
+  }
+};
+
+const getFaceShapeRecommendation = (faceShape: string): string => {
+  switch (faceShape.toLowerCase()) {
+    case 'oval':
+      return 'balanced application as most styles complement your proportional shape';
+    case 'round':
+      return 'applying contour at the temples and jawline to create definition';
+    case 'square':
+      return 'softening the angles with contour at the corners of your jawline';
+    case 'heart':
+      return 'balancing your wider forehead with contour and highlighting your chin';
+    case 'diamond':
+      return 'highlighting your cheekbones and softening your forehead and jawline';
+    case 'rectangle':
+      return 'applying blush horizontally across your cheeks to add width';
+    default:
+      return 'balanced application that enhances your unique proportions';
+  }
+};
+
+const getFeatureRecommendation = (feature: string): string => {
+  if (feature.includes('eyes')) {
+    return 'eyeshadow techniques that accentuate your eye shape and color';
+  } else if (feature.includes('lips')) {
+    return 'lip products that enhance your natural lip shape';
+  } else if (feature.includes('cheek') || feature.includes('bone')) {
+    return 'highlighting techniques that make your cheekbones pop';
+  } else if (feature.includes('brow')) {
+    return 'brow products that define and frame your face';
+  } else {
+    return 'makeup techniques that highlight this beautiful feature';
+  }
+};
+
+const getToolTip = (tool: string): string => {
+  if (tool.includes('foundation')) {
+    return 'apply in downward strokes to avoid highlighting facial hair';
+  } else if (tool.includes('brush') && tool.includes('blush')) {
+    return 'smile to find the apples of your cheeks for perfect placement';
+  } else if (tool.includes('eye')) {
+    return 'use light, building motions rather than heavy application';
+  } else if (tool.includes('lip')) {
+    return 'start from the center and work outward for even application';
+  } else {
+    return 'use soft, blending motions for the most natural finish';
+  }
 };
 
 export default AIAssistantPanel;

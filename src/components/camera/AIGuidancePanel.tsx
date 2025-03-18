@@ -79,19 +79,7 @@ const AIGuidancePanel: React.FC<AIGuidancePanelProps> = ({
             {voiceEnabled ? "Voice On" : "Voice Off"}
           </Button>
           
-          <div className="flex items-center">
-            <span className="text-sm text-gray-500 mr-2">Style:</span>
-            <select
-              value={region}
-              onChange={(e) => setRegion(e.target.value as any)}
-              className="text-sm border rounded p-1"
-            >
-              <option value="usa">USA</option>
-              <option value="korean">Korean</option>
-              <option value="indian">Indian</option>
-              <option value="european">European</option>
-            </select>
-          </div>
+          {/* Region selector is removed from UI but still maintained in code for AI training */}
           
           <Button
             variant="outline"
