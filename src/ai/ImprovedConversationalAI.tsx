@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageSquare, Mic, MicOff, Volume2, Brain } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -42,27 +41,28 @@ const ImprovedConversationalAI: React.FC<ImprovedConversationalAIProps> = ({
   const personalityTypes = ['helpful', 'friendly', 'expert', 'coach', 'cheerleader'];
   const [personality, setPersonality] = useState('friendly');
   
-  // Initialize speech recognition
   useEffect(() => {
     if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = true;
-      recognitionRef.current.interimResults = true;
-      
-      recognitionRef.current.onresult = (event) => {
-        const transcript = Array.from(event.results)
-          .map(result => result[0])
-          .map(result => result.transcript)
-          .join('');
+      const SpeechRecognitionConstructor = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognitionConstructor) {
+        recognitionRef.current = new SpeechRecognitionConstructor();
+        recognitionRef.current.continuous = true;
+        recognitionRef.current.interimResults = true;
         
-        setUserInput(transcript);
-      };
-      
-      recognitionRef.current.onerror = (event) => {
-        console.error('Speech recognition error', event);
-        setIsListening(false);
-      };
+        recognitionRef.current.onresult = (event) => {
+          const transcript = Array.from(event.results)
+            .map(result => result[0])
+            .map(result => result.transcript)
+            .join('');
+          
+          setUserInput(transcript);
+        };
+        
+        recognitionRef.current.onerror = (event) => {
+          console.error('Speech recognition error', event);
+          setIsListening(false);
+        };
+      }
       
       return () => {
         if (recognitionRef.current) {
@@ -74,14 +74,12 @@ const ImprovedConversationalAI: React.FC<ImprovedConversationalAIProps> = ({
     }
   }, []);
   
-  // Auto-scroll to latest message
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [conversation]);
   
-  // Toggle listening
   const toggleListening = () => {
     if (!recognitionRef.current) return;
     
@@ -94,21 +92,17 @@ const ImprovedConversationalAI: React.FC<ImprovedConversationalAIProps> = ({
     }
   };
   
-  // Handle sending messages
   const sendMessage = async () => {
     if (!userInput.trim()) return;
     
-    // Add user message to conversation
     const userMessage = userInput.trim();
     setConversation(prev => [...prev, { role: 'user', content: userMessage }]);
     setUserInput('');
     setIsThinking(true);
     
-    // Extract detected tool types
     const toolTypes = detectedTools.map(tool => tool.type);
     
     try {
-      // Generate AI response
       const response = await generateContextualResponse(
         userMessage,
         facialTraits,
@@ -117,10 +111,8 @@ const ImprovedConversationalAI: React.FC<ImprovedConversationalAIProps> = ({
         faceDetected
       );
       
-      // Add AI response to conversation
       setConversation(prev => [...prev, { role: 'ai', content: response }]);
       
-      // Check for commands to execute
       const commandPatterns = [
         { regex: /next( step)?/i, command: 'next' },
         { regex: /previous( step)?/i, command: 'previous' },
@@ -143,7 +135,6 @@ const ImprovedConversationalAI: React.FC<ImprovedConversationalAIProps> = ({
         }
       }
       
-      // Speak the response
       setIsSpeaking(true);
       await speakInstruction(response);
       setIsSpeaking(false);
@@ -158,7 +149,6 @@ const ImprovedConversationalAI: React.FC<ImprovedConversationalAIProps> = ({
     }
   };
   
-  // Handle key press
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
