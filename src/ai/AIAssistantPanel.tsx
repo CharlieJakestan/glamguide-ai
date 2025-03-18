@@ -137,7 +137,7 @@ const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
             AI Makeup Assistant
           </CardTitle>
           <Badge 
-            variant={faceDetected ? "success" : "destructive"}
+            variant={faceDetected ? "default" : "destructive"}
             className={`${faceDetected ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
           >
             {faceDetected ? 'Face Detected' : 'No Face Detected'}

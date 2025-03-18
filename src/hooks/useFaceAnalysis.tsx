@@ -44,6 +44,7 @@ export const useFaceAnalysis = (voiceEnabled: boolean) => {
   const [useEnhancedVoice, setUseEnhancedVoice] = useState(false);
   const [detectedTools, setDetectedTools] = useState<Array<{ type: string; confidence: number }>>([]);
   const [facialMovement, setFacialMovement] = useState<{ x: number; y: number; magnitude: number }>({ x: 0, y: 0, magnitude: 0 });
+  const [faceDetected, setFaceDetected] = useState(false);
   
   const analyzeFace = useCallback(async (videoElement: HTMLVideoElement) => {
     try {
@@ -193,7 +194,7 @@ export const useFaceAnalysis = (voiceEnabled: boolean) => {
     const mockData = generateMockFacialTraits();
     setDetectedFacialTraits(mockData);
     
-    const guidance = generateMockGuidance(0);
+    const guidance = generateMockGuidance();
     if (voiceEnabled) {
       speakInstruction(guidance);
     }
@@ -301,7 +302,9 @@ export const useFaceAnalysis = (voiceEnabled: boolean) => {
     facialMovement,
     handleVoiceCommand,
     useEnhancedVoice,
-    setUseEnhancedVoice
+    setUseEnhancedVoice,
+    faceDetected,
+    setFaceDetected
   };
 };
 
