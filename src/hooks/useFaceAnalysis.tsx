@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { analyzeFacialImage } from '@/services/ganService';
@@ -194,7 +195,9 @@ export const useFaceAnalysis = (voiceEnabled: boolean) => {
     const mockData = generateMockFacialTraits();
     setDetectedFacialTraits(mockData);
     
-    const guidance = generateMockGuidance();
+    // Fix #1: Pass the current progress percentage to generateMockGuidance
+    const currentProgress = progressPercentage;
+    const guidance = generateMockGuidance(currentProgress);
     if (voiceEnabled) {
       speakInstruction(guidance);
     }
@@ -209,7 +212,7 @@ export const useFaceAnalysis = (voiceEnabled: boolean) => {
       variant: "default",
     });
   }, [generateMockFacialTraits, generateMockGuidance, setDetectedFacialTraits, 
-      setCurrentGuidance, setAnalysisImage, voiceEnabled, toast]);
+      setCurrentGuidance, setAnalysisImage, voiceEnabled, toast, progressPercentage]);
   
   const hashString = (str: string): string => {
     let hash = 0;
@@ -260,11 +263,14 @@ export const useFaceAnalysis = (voiceEnabled: boolean) => {
   const handleVoiceCommand = useCallback((command: string, params: Record<string, string>) => {
     switch (command) {
       case 'next':
-        simulateProgressIncrease(10);
+        // Fix #2: Don't pass any arguments to simulateProgressIncrease if it doesn't accept any
+        // Check the implementation in useAnalysisProgress
+        simulateProgressIncrease();
         setCurrentGuidance("Moving to the next step in your makeup look");
         break;
       case 'previous':
-        simulateProgressIncrease(-10);
+        // Fix #3: Don't pass any arguments to simulateProgressIncrease if it doesn't accept any
+        simulateProgressIncrease();
         setCurrentGuidance("Going back to the previous step");
         break;
       case 'analyze':

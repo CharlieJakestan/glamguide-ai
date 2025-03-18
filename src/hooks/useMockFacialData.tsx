@@ -1,4 +1,3 @@
-
 import { useCallback } from 'react';
 
 // Mock data for demonstration
@@ -25,38 +24,19 @@ const mockRecommendations = [
 export const useMockFacialData = () => {
   const generateMockFacialTraits = useCallback(() => {
     // Randomly select traits
-    const skinTone = mockSkinTones[Math.floor(Math.random() * mockSkinTones.length)];
-    const faceShape = mockFaceShapes[Math.floor(Math.random() * mockFaceShapes.length)];
-    
-    // Select 2-4 random features
-    const featureCount = Math.floor(Math.random() * 3) + 2;
-    const features = [];
-    for (let i = 0; i < featureCount; i++) {
-      const feature = mockFeatures[Math.floor(Math.random() * mockFeatures.length)];
-      if (!features.includes(feature)) {
-        features.push(feature);
-      }
-    }
-    
-    // Select 3-5 random recommendations
-    const recommendationCount = Math.floor(Math.random() * 3) + 3;
-    const recommendations = [];
-    for (let i = 0; i < recommendationCount; i++) {
-      const recommendation = mockRecommendations[Math.floor(Math.random() * mockRecommendations.length)];
-      if (!recommendations.includes(recommendation)) {
-        recommendations.push(recommendation);
-      }
-    }
-    
     return {
-      skinTone,
-      faceShape,
-      features,
-      recommendations
+      skinTone: mockSkinTones[Math.floor(Math.random() * mockSkinTones.length)],
+      faceShape: mockFaceShapes[Math.floor(Math.random() * mockFaceShapes.length)],
+      features: [...Array(Math.floor(Math.random() * 3) + 2)].map(() => 
+        mockFeatures[Math.floor(Math.random() * mockFeatures.length)]
+      ).filter((v, i, a) => a.indexOf(v) === i),
+      recommendations: [...Array(Math.floor(Math.random() * 3) + 3)].map(() => 
+        mockRecommendations[Math.floor(Math.random() * mockRecommendations.length)]
+      ).filter((v, i, a) => a.indexOf(v) === i)
     };
   }, []);
 
-  const generateMockGuidance = useCallback((progress: number) => {
+  const generateMockGuidance = useCallback((progress: number = 0) => {
     let guidance = '';
     
     if (progress < 20) {
