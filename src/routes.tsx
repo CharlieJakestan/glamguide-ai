@@ -3,9 +3,9 @@ import React from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 import Home from './pages/Home';
 import Login from './pages/Login';
+import Profile from './pages/Profile';
 import GanGenerator from './pages/GanGenerator';
 import GanGeneratorAdvanced from './pages/GanGeneratorAdvanced';
-import Profile from './pages/Profile';
 import NotFound from './pages/NotFound';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 
