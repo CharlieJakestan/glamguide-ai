@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -8,6 +7,7 @@ import {
   applyVirtualMakeup,
   cleanupAdvancedFaceDetection
 } from '@/lib/advancedFaceDetection';
+import * as faceapi from '@vladmandic/face-api';
 
 interface UseAdvancedFaceDetectionProps {
   videoRef: React.RefObject<HTMLVideoElement>;
@@ -49,7 +49,6 @@ export const useAdvancedFaceDetection = ({
   const successfulDetectionsRef = useRef(0);
   const detectionAttemptsRef = useRef(0);
   
-  // Initialize advanced face detection
   useEffect(() => {
     const initialize = async () => {
       const success = await initAdvancedFaceDetection();
@@ -73,20 +72,17 @@ export const useAdvancedFaceDetection = ({
     };
   }, [toast]);
   
-  // Setup camera and detection when enabled
   useEffect(() => {
     if (!faceDetectionReady || !enabled || !videoRef.current || !canvasRef.current) {
       return;
     }
     
-    // Handle face detection results
     const handleFaceDetected = (detected: boolean, landmarks?: any) => {
       if (detected && landmarks) {
         successfulDetectionsRef.current++;
         detectionAttemptsRef.current = 0;
         setDetectionConfidence(Math.min(successfulDetectionsRef.current / 10, 1));
         
-        // Set face detected if not already
         if (!faceDetected) {
           setFaceDetected(true);
           if (onFaceDetectionChange) onFaceDetectionChange(true);
@@ -99,12 +95,10 @@ export const useAdvancedFaceDetection = ({
           });
         }
         
-        // Extract makeup regions
         const regions = getMakeupRegions(landmarks);
         setMakeupRegions(regions);
         if (onRegionsDetected) onRegionsDetected(regions);
         
-        // Track facial movement
         if (previousLandmarksRef.current) {
           const movement = {
             x: landmarks[1].x - previousLandmarksRef.current[1].x,
@@ -117,11 +111,9 @@ export const useAdvancedFaceDetection = ({
           setMovementData(movement);
         }
         
-        // Save current landmarks for next comparison
         setFaceLandmarks(landmarks);
         previousLandmarksRef.current = landmarks;
         
-        // Analyze facial attributes periodically
         if (successfulDetectionsRef.current % 30 === 0) {
           analyzeFacialAttributes();
         }
@@ -143,14 +135,12 @@ export const useAdvancedFaceDetection = ({
       }
     };
     
-    // Handle MediaPipe results
     const handleResults = (results: any) => {
       if (!canvasRef.current) return;
       
       const canvasCtx = canvasRef.current.getContext('2d');
       if (!canvasCtx) return;
       
-      // Apply virtual makeup if provided
       if (virtualMakeup && makeupRegions) {
         applyVirtualMakeup(canvasCtx, makeupRegions, virtualMakeup);
       }
@@ -165,7 +155,6 @@ export const useAdvancedFaceDetection = ({
     
   }, [faceDetectionReady, enabled, videoRef, canvasRef, faceDetected, onFaceDetectionChange, toast, makeupRegions, virtualMakeup, onRegionsDetected]);
   
-  // Analyze facial attributes using face-api.js
   const analyzeFacialAttributes = useCallback(async () => {
     if (!videoRef.current) return;
     
@@ -180,7 +169,6 @@ export const useAdvancedFaceDetection = ({
           return detections.expressions[prev] > detections.expressions[current] ? prev : current;
         });
         
-        // Determine skin type based on face detection and lighting (simplified)
         const skinTypes = ['Normal', 'Dry', 'Oily', 'Combination'];
         const randomSkinType = skinTypes[Math.floor(Math.random() * skinTypes.length)];
         
@@ -196,7 +184,6 @@ export const useAdvancedFaceDetection = ({
     }
   }, [videoRef]);
   
-  // Detect actions based on facial movement
   const [detectedActions, setDetectedActions] = useState<{
     action: string;
     confidence: number;
@@ -206,10 +193,8 @@ export const useAdvancedFaceDetection = ({
   useEffect(() => {
     if (!faceDetected || !faceLandmarks) return;
     
-    // Map movement data to possible actions
     const detectAction = () => {
       if (movementData.magnitude > 10) {
-        // Significant movement
         let action = '';
         let confidence = 0.7;
         
@@ -221,10 +206,9 @@ export const useAdvancedFaceDetection = ({
           confidence = Math.min(0.7 + Math.abs(movementData.y) / 100, 0.95);
         }
         
-        // Add the detected action to the list
         setDetectedActions(prev => [
           { action, confidence, timestamp: Date.now() },
-          ...prev.slice(0, 9) // Keep only the 10 most recent actions
+          ...prev.slice(0, 9)
         ]);
       }
     };

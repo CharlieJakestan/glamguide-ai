@@ -26,6 +26,12 @@ interface FacialAnalysisDisplayProps {
   nearbyObjects?: DetectedObject[];
   faceDetectionConfidence?: number;
   detectedMakeupTools?: Array<{type: string, confidence: number}>;
+  facialAttributes?: {
+    age?: number;
+    gender?: string;
+    expression?: string;
+    skinType?: string;
+  };
 }
 
 const FacialAnalysisDisplay: React.FC<FacialAnalysisDisplayProps> = ({

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '@/components/Layout';
 import { useToast } from '@/hooks/use-toast';
@@ -31,6 +30,7 @@ const GanGeneratorAdvanced = () => {
   } = useCamera();
   
   const [faceDetectionReady, setFaceDetectionReady] = useState(false);
+  const [facePosition, setFacePosition] = useState({ x: 0, y: 0, width: 0, height: 0 });
   
   const {
     voiceEnabled, setVoiceEnabled,
@@ -49,6 +49,7 @@ const GanGeneratorAdvanced = () => {
     detectedMakeupTools
   } = useMakeupObjectDetection({
     videoRef,
+    facePosition,
     enabled: cameraActive
   });
   
@@ -271,7 +272,10 @@ const GanGeneratorAdvanced = () => {
                 completedSteps: lookGuidance.completedSteps,
                 totalSteps: stepNames.length,
                 stepNames,
-                getCurrentInstruction: lookGuidance.getCurrentStepInstruction,
+                getCurrentInstruction: () => {
+                  const instruction = lookGuidance.getCurrentStepInstruction();
+                  return typeof instruction === 'string' ? instruction : instruction.instruction;
+                },
                 goToNextStep: lookGuidance.goToNextStep,
                 goToPreviousStep: lookGuidance.goToPreviousStep,
                 markCompleted: lookGuidance.markCurrentStepCompleted,
