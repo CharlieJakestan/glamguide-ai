@@ -2,11 +2,11 @@
 import * as tf from '@tensorflow/tfjs';
 import { Generator } from './Generator';
 import { Discriminator } from './Discriminator';
-import { GANConfig, GANLosses, TrainingConfig } from './types';
+import { GANConfig, GANLosses } from './types';
 
 export class GANModel {
-  private generator: Generator;
-  private discriminator: Discriminator;
+  public generator: Generator;
+  public discriminator: Discriminator;
   private gOptimizer: tf.Optimizer;
   private dOptimizer: tf.Optimizer;
 
@@ -41,9 +41,9 @@ export class GANModel {
       const realOutput = this.discriminator.discriminate(realImages);
       const fakeOutput = this.discriminator.discriminate(fakeImages);
 
-      // Calculate loss
-      const realLoss = tf.losses.binaryCrossentropy(tf.ones(realOutput.shape), realOutput);
-      const fakeLoss = tf.losses.binaryCrossentropy(tf.zeros(fakeOutput.shape), fakeOutput);
+      // Calculate loss - using sigmoidCrossEntropy instead of binaryCrossentropy
+      const realLoss = tf.losses.sigmoidCrossEntropy(tf.ones(realOutput.shape), realOutput);
+      const fakeLoss = tf.losses.sigmoidCrossEntropy(tf.zeros(fakeOutput.shape), fakeOutput);
       const totalLoss = tf.add(realLoss, fakeLoss);
 
       return totalLoss;
@@ -59,7 +59,7 @@ export class GANModel {
       const fakeOutput = this.discriminator.discriminate(fakeImages);
 
       // Calculate loss (we want the discriminator to think these are real)
-      return tf.losses.binaryCrossentropy(tf.ones(fakeOutput.shape), fakeOutput);
+      return tf.losses.sigmoidCrossEntropy(tf.ones(fakeOutput.shape), fakeOutput);
     });
   }
 

@@ -3,7 +3,7 @@ import * as tf from '@tensorflow/tfjs';
 import { GANConfig } from './types';
 
 export class Generator {
-  private model: tf.LayersModel;
+  public model: tf.LayersModel;
   private imageSize: number;
 
   constructor(config: GANConfig) {
@@ -20,10 +20,16 @@ export class Generator {
       strides: 2,
       padding: 'same',
       useBias: false
-    }).apply(input) as tf.Tensor;
+    }).apply(input);
 
-    x = tf.layers.batchNormalization().apply(x) as tf.Tensor;
-    x = tf.layers.leakyReLU().apply(x) as tf.Tensor;
+    // TypeScript needs type assertion for the model creation
+    if (!x) throw new Error('Layer application failed');
+
+    x = tf.layers.batchNormalization().apply(x);
+    if (!x) throw new Error('Layer application failed');
+    
+    x = tf.layers.leakyReLU().apply(x);
+    if (!x) throw new Error('Layer application failed');
 
     x = tf.layers.conv2d({
       filters: 128,
@@ -31,10 +37,14 @@ export class Generator {
       strides: 2,
       padding: 'same',
       useBias: false
-    }).apply(x) as tf.Tensor;
+    }).apply(x);
+    if (!x) throw new Error('Layer application failed');
 
-    x = tf.layers.batchNormalization().apply(x) as tf.Tensor;
-    x = tf.layers.leakyReLU().apply(x) as tf.Tensor;
+    x = tf.layers.batchNormalization().apply(x);
+    if (!x) throw new Error('Layer application failed');
+    
+    x = tf.layers.leakyReLU().apply(x);
+    if (!x) throw new Error('Layer application failed');
 
     x = tf.layers.conv2d({
       filters: 256,
@@ -42,10 +52,14 @@ export class Generator {
       strides: 2,
       padding: 'same',
       useBias: false
-    }).apply(x) as tf.Tensor;
+    }).apply(x);
+    if (!x) throw new Error('Layer application failed');
 
-    x = tf.layers.batchNormalization().apply(x) as tf.Tensor;
-    x = tf.layers.leakyReLU().apply(x) as tf.Tensor;
+    x = tf.layers.batchNormalization().apply(x);
+    if (!x) throw new Error('Layer application failed');
+    
+    x = tf.layers.leakyReLU().apply(x);
+    if (!x) throw new Error('Layer application failed');
 
     x = tf.layers.conv2dTranspose({
       filters: 128,
@@ -53,10 +67,14 @@ export class Generator {
       strides: 2,
       padding: 'same',
       useBias: false
-    }).apply(x) as tf.Tensor;
+    }).apply(x);
+    if (!x) throw new Error('Layer application failed');
 
-    x = tf.layers.batchNormalization().apply(x) as tf.Tensor;
-    x = tf.layers.reLU().apply(x) as tf.Tensor;
+    x = tf.layers.batchNormalization().apply(x);
+    if (!x) throw new Error('Layer application failed');
+    
+    x = tf.layers.reLU().apply(x);
+    if (!x) throw new Error('Layer application failed');
 
     x = tf.layers.conv2dTranspose({
       filters: 64,
@@ -64,10 +82,14 @@ export class Generator {
       strides: 2,
       padding: 'same',
       useBias: false
-    }).apply(x) as tf.Tensor;
+    }).apply(x);
+    if (!x) throw new Error('Layer application failed');
 
-    x = tf.layers.batchNormalization().apply(x) as tf.Tensor;
-    x = tf.layers.reLU().apply(x) as tf.Tensor;
+    x = tf.layers.batchNormalization().apply(x);
+    if (!x) throw new Error('Layer application failed');
+    
+    x = tf.layers.reLU().apply(x);
+    if (!x) throw new Error('Layer application failed');
 
     const output = tf.layers.conv2dTranspose({
       filters: 3,
@@ -75,7 +97,8 @@ export class Generator {
       strides: 2,
       padding: 'same',
       activation: 'tanh'
-    }).apply(x) as tf.Tensor;
+    }).apply(x);
+    if (!output) throw new Error('Layer application failed');
 
     return tf.model({ inputs: input, outputs: output });
   }
