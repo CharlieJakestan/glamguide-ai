@@ -67,7 +67,11 @@ export class Discriminator {
     const output = tf.layers.dense({ units: 1, activation: 'sigmoid' }).apply(x);
     if (!output) throw new Error('Layer application failed');
 
-    return tf.model({ inputs: input, outputs: output });
+    // Fix the TypeScript error by using a type assertion
+    return tf.model({ 
+      inputs: input, 
+      outputs: output as unknown as tf.SymbolicTensor 
+    });
   }
 
   public discriminate(input: tf.Tensor): tf.Tensor {
