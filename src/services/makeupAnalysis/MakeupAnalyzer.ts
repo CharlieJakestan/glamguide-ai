@@ -1,4 +1,6 @@
 
+import { MakeupRecommendation } from '@/services/makeupAnalysis/types';
+
 export class MakeupAnalyzer {
   private known_makeup_looks = [
     "Natural/Minimal",
