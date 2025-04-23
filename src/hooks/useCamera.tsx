@@ -4,10 +4,29 @@ import { useToast } from '@/hooks/use-toast';
 
 export const useCamera = () => {
   const [cameraActive, setCameraActive] = useState(false);
+  const [permissionDenied, setPermissionDenied] = useState(false);
+  const [deviceNotFound, setDeviceNotFound] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const { toast } = useToast();
+
+  // Check if camera is available when component mounts
+  useEffect(() => {
+    // Check if the browser supports getUserMedia
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      toast({
+        title: "Camera Not Supported",
+        description: "Your browser doesn't support camera access. Try using a modern browser.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Reset device error states when component mounts
+    setDeviceNotFound(false);
+    setPermissionDenied(false);
+  }, [toast]);
 
   // Clean up camera stream when component unmounts
   useEffect(() => {
@@ -19,6 +38,17 @@ export const useCamera = () => {
     };
   }, []);
 
+  const checkDevices = async (): Promise<boolean> => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter(device => device.kind === 'videoinput');
+      return videoDevices.length > 0;
+    } catch (error) {
+      console.error('Error checking devices:', error);
+      return false;
+    }
+  };
+
   const toggleCamera = async () => {
     if (cameraActive) {
       // Stop camera
@@ -27,6 +57,23 @@ export const useCamera = () => {
         streamRef.current = null;
       }
       setCameraActive(false);
+      return;
+    }
+    
+    // Reset error states
+    setDeviceNotFound(false);
+    setPermissionDenied(false);
+    
+    // Check if any video devices are available
+    const hasVideoDevices = await checkDevices();
+    
+    if (!hasVideoDevices) {
+      setDeviceNotFound(true);
+      toast({
+        title: "No Camera Found",
+        description: "No video input devices detected. Please connect a camera and try again.",
+        variant: "destructive",
+      });
       return;
     }
     
@@ -69,11 +116,37 @@ export const useCamera = () => {
       console.log('Camera activated successfully');
     } catch (error) {
       console.error('Error accessing camera:', error);
-      toast({
-        title: "Camera Access Error",
-        description: "Could not access your camera. Please check permissions and try again.",
-        variant: "destructive",
-      });
+      
+      // Handle specific error types
+      if (error instanceof DOMException) {
+        if (error.name === 'NotFoundError') {
+          setDeviceNotFound(true);
+          toast({
+            title: "Camera Not Found",
+            description: "No camera was found or it may be in use by another application.",
+            variant: "destructive",
+          });
+        } else if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+          setPermissionDenied(true);
+          toast({
+            title: "Permission Denied",
+            description: "Camera access was blocked. Please reset permissions in your browser settings and try again.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Camera Access Error",
+            description: `Could not access camera: ${error.message}`,
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "Camera Access Error",
+          description: "An unknown error occurred while accessing the camera.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -108,6 +181,9 @@ export const useCamera = () => {
     videoRef,
     canvasRef,
     streamRef,
-    captureFrame
+    captureFrame,
+    permissionDenied,
+    deviceNotFound,
+    checkDevices
   };
 };

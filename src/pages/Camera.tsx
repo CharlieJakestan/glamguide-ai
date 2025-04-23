@@ -16,14 +16,23 @@ import LookNavigation from '@/components/camera/LookNavigation';
 import AIGuidancePanel from '@/components/camera/AIGuidancePanel';
 import APIKeyDialog from '@/components/camera/APIKeyDialog';
 import { useMakeupGuidance } from '@/hooks/useMakeupGuidance';
+import { useCamera } from '@/hooks/useCamera';
 
 const CameraPage = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [isStreamActive, setIsStreamActive] = useState(false);
+  const {
+    cameraActive,
+    toggleCamera,
+    videoRef,
+    canvasRef,
+    streamRef,
+    captureFrame,
+    permissionDenied,
+    deviceNotFound,
+    checkDevices
+  } = useCamera();
+  
   const [isLoading, setIsLoading] = useState(true);
   const [products, setProducts] = useState<MakeupProduct[]>([]);
   const [looks, setLooks] = useState<MakeupLook[]>([]);
@@ -175,7 +184,7 @@ const CameraPage = () => {
     setRegion,
     setVoiceEnabled
   } = useMakeupGuidance({
-    isActive: isStreamActive && showAIGuidance && faceDetected,
+    isActive: cameraActive && showAIGuidance && faceDetected,
     currentLook,
     availableProducts: products,
     canvasRef,
@@ -183,66 +192,17 @@ const CameraPage = () => {
     faceDetected
   });
   
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: "user" } 
-      });
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        setIsStreamActive(true);
-        setHasPermission(true);
-        
-        // Only start face detection if models are loaded
-        if (modelsLoaded) {
-          toast({
-            title: 'Camera Active',
-            description: 'Starting face detection...',
-            variant: 'default',
-          });
-          startFaceDetection();
-        } else {
-          toast({
-            title: 'Limited Mode',
-            description: 'Camera is active, but face detection is unavailable.',
-            variant: 'default',
-          });
-        }
-      }
-    } catch (err) {
-      console.error("Error accessing camera:", err);
-      setHasPermission(false);
-      toast({
-        title: 'Error',
-        description: 'Failed to access camera. Please check your permissions and try again.',
-        variant: 'destructive',
-      });
-    }
-  };
-  
-  const stopCamera = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-      tracks.forEach(track => track.stop());
-      videoRef.current.srcObject = null;
-      setIsStreamActive(false);
-      setFaceDetected(false);
-      
-      if (canvasRef.current) {
-        const ctx = canvasRef.current.getContext('2d');
-        if (ctx) {
-          ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-        }
-      }
-    }
-  };
-  
   useEffect(() => {
     if (resetAnalysis) {
       resetAnalysis();
     }
   }, [currentLook, resetAnalysis]);
+  
+  useEffect(() => {
+    if (cameraActive && videoRef.current && canvasRef.current && modelsLoaded) {
+      startFaceDetection();
+    }
+  }, [cameraActive, modelsLoaded]);
   
   const startFaceDetection = () => {
     if (!videoRef.current || !canvasRef.current || !modelsLoaded) return;
@@ -263,7 +223,7 @@ const CameraPage = () => {
     video.addEventListener('loadedmetadata', updateDimensions);
     
     const detectFace = async () => {
-      if (!video || !canvas || !isStreamActive || !modelsLoaded) return;
+      if (!video || !canvas || !cameraActive || !modelsLoaded) return;
       
       try {
         const detections = await detectFacialLandmarks(video);
@@ -290,7 +250,7 @@ const CameraPage = () => {
         console.error('Error in face detection loop:', error);
       }
       
-      if (isStreamActive) {
+      if (cameraActive) {
         requestAnimationFrame(detectFace);
       }
     };
@@ -362,7 +322,7 @@ const CameraPage = () => {
         });
         
         // If camera is already running, restart face detection
-        if (isStreamActive) {
+        if (cameraActive) {
           startFaceDetection();
         }
       } else {
@@ -386,7 +346,9 @@ const CameraPage = () => {
   
   useEffect(() => {
     return () => {
-      stopCamera();
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
     };
   }, []);
   
@@ -437,25 +399,28 @@ const CameraPage = () => {
           <VideoDisplay
             videoRef={videoRef}
             canvasRef={canvasRef}
-            isStreamActive={isStreamActive}
+            isStreamActive={cameraActive}
             faceDetected={faceDetected}
             retryFaceDetection={retryFaceDetection}
             guidanceHighlight={showAIGuidance && currentGuidance?.visualGuide}
           />
           
           <CameraControls
-            isStreamActive={isStreamActive}
+            isStreamActive={cameraActive}
             showSettings={showSettings}
             modelsLoaded={modelsLoaded}
-            startCamera={startCamera}
-            stopCamera={stopCamera}
+            startCamera={toggleCamera}
+            stopCamera={toggleCamera}
             toggleSettings={toggleSettings}
             retryFaceDetection={retryFaceDetection}
             isLoadingModels={isLoadingModels}
             reloadModels={reloadModels}
+            permissionDenied={permissionDenied}
+            deviceNotFound={deviceNotFound}
+            checkDevices={checkDevices}
           />
           
-          {isStreamActive && modelsLoaded && (
+          {cameraActive && modelsLoaded && (
             <div className="mt-4 flex justify-center">
               <Button
                 variant={showAIGuidance ? "default" : "outline"}
@@ -479,12 +444,6 @@ const CameraPage = () => {
             </div>
           )}
           
-          {hasPermission === false && (
-            <p className="mt-4 text-red-600 text-center">
-              Camera access denied. Please check your browser permissions.
-            </p>
-          )}
-          
           {showSettings && currentLook && (
             <IntensitySettings
               products={getCurrentLookProducts()}
@@ -492,7 +451,7 @@ const CameraPage = () => {
             />
           )}
           
-          {showAIGuidance && isStreamActive && (
+          {showAIGuidance && cameraActive && (
             <AIGuidancePanel
               guidance={currentGuidance}
               isAnalyzing={isAnalyzing}
