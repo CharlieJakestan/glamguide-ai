@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Camera, CameraOff, Sliders, RefreshCw, Loader2, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -34,11 +33,10 @@ const CameraControls: React.FC<CameraControlsProps> = ({
   checkDevices
 }) => {
   const handleStartCamera = async () => {
-    // If we have the checkDevices function, use it
     if (checkDevices) {
       const hasDevices = await checkDevices();
       if (!hasDevices) {
-        return; // The hook will show the appropriate toast
+        return;
       }
     }
     startCamera();
@@ -109,22 +107,8 @@ const CameraControls: React.FC<CameraControlsProps> = ({
         )}
       </div>
       
-      {permissionDenied && (
-        <Alert variant="destructive" className="mt-2">
-          <AlertTitle>Camera Permission Denied</AlertTitle>
-          <AlertDescription>
-            <p>You've blocked camera access in your browser settings. To fix this:</p>
-            <ol className="list-decimal ml-5 mt-2 space-y-1">
-              <li>Click the camera/lock icon in your browser's address bar</li>
-              <li>Select "Allow" for camera access</li>
-              <li>Refresh the page and try again</li>
-            </ol>
-          </AlertDescription>
-        </Alert>
-      )}
-      
       {deviceNotFound && (
-        <Alert variant="warning" className="mt-2 border-yellow-500 text-yellow-800 bg-yellow-50">
+        <Alert variant="destructive" className="mt-2 border-yellow-500 text-yellow-800 bg-yellow-50">
           <AlertTitle>No Camera Detected</AlertTitle>
           <AlertDescription>
             <p>Your browser couldn't find a camera device. Please check:</p>
