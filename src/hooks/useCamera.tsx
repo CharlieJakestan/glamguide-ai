@@ -31,17 +31,32 @@ export const useCamera = () => {
     }
     
     try {
+      // Explicitly request camera access with specific constraints
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { 
           width: { ideal: 1280 },
           height: { ideal: 720 },
           facingMode: "user" 
-        } 
+        },
+        audio: false
       });
       
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
+        
+        // Ensure the video element starts playing
+        const playPromise = videoRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            console.error('Error playing video:', error);
+            toast({
+              title: "Video Playback Error",
+              description: "Could not start video playback. Please try again.",
+              variant: "destructive",
+            });
+          });
+        }
       }
       
       setCameraActive(true);
@@ -50,11 +65,13 @@ export const useCamera = () => {
         title: "Camera Activated",
         description: "Position your face in the frame for analysis.",
       });
+      
+      console.log('Camera activated successfully');
     } catch (error) {
       console.error('Error accessing camera:', error);
       toast({
         title: "Camera Access Error",
-        description: "Could not access your camera. Please check permissions.",
+        description: "Could not access your camera. Please check permissions and try again.",
         variant: "destructive",
       });
     }
