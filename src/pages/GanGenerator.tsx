@@ -322,14 +322,14 @@ const GanGenerator = () => {
               canvasRef={canvasRef}
               faceDetected={faceDetected}
               movementData={{
-                x: movementData?.x || 0,
-                y: movementData?.y || 0,
-                magnitude: movementData?.magnitude || 0
+                x: movementData?.headPose?.yaw || 0,
+                y: movementData?.headPose?.pitch || 0,
+                magnitude: movementData?.headPose?.roll || 0
               }}
               lastActivity={lastActivity}
               nearbyObjects={detectedObjects.map(obj => ({
                 type: obj.type,
-                position: { x: obj.position.x, y: obj.position.y }
+                position: { x: obj.confidence || 0, y: obj.confidence || 0 }
               }))}
               detectedMakeupTools={detectedMakeupTools}
             />
