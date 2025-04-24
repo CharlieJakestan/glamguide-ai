@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '@/components/Layout';
 import { useToast } from '@/hooks/use-toast';
@@ -323,14 +322,14 @@ const GanGenerator = () => {
               canvasRef={canvasRef}
               faceDetected={faceDetected}
               movementData={{
-                x: movementData?.headPose?.yaw || 0,
-                y: movementData?.headPose?.pitch || 0,
+                x: movementData?.x || 0,
+                y: movementData?.y || 0,
                 magnitude: movementData?.magnitude || 0
               }}
               lastActivity={lastActivity}
               nearbyObjects={detectedObjects.map(obj => ({
                 type: obj.type,
-                position: obj.position
+                position: { x: obj.position.x, y: obj.position.y }
               }))}
               detectedMakeupTools={detectedMakeupTools}
             />
