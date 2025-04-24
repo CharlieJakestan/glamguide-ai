@@ -11,6 +11,7 @@ import FacialAnalysisDisplay from './FacialAnalysisDisplay';
 import LookStepNavigation from './LookStepNavigation';
 import AdvancedAIAssistant from '@/ai/AdvancedAIAssistant';
 import { useAdvancedFaceDetection } from '@/hooks/useAdvancedFaceDetection';
+import { FacialAttributes, MovementData, DetectedAction, MakeupRegion, DetectedObject } from '@/types/facial-analysis';
 
 interface AdvancedFaceAnalysisCameraProps {
   cameraActive: boolean;
@@ -79,7 +80,8 @@ const AdvancedFaceAnalysisCamera: React.FC<AdvancedFaceAnalysisCameraProps> = ({
     faceLandmarks,
     movementData,
     facialAttributes,
-    detectedActions
+    detectedActions,
+    detectedObjects
   } = useAdvancedFaceDetection({
     videoRef,
     canvasRef,
@@ -304,13 +306,22 @@ const AdvancedFaceAnalysisCamera: React.FC<AdvancedFaceAnalysisCameraProps> = ({
               detectedFacialTraits={detectedFacialTraits}
               voiceEnabled={voiceEnabled}
               analysisImage={analysisImage}
-              movementData={movementData}
+              movementData={{
+                x: movementData.x,
+                y: movementData.y,
+                magnitude: movementData.magnitude
+              }}
               lastActivity={detectedActions.length > 0 ? detectedActions[0].action : null}
               onReanalyze={onCaptureAndAnalyze}
               isAnalyzing={isAnalyzing}
               faceDetectionConfidence={detectionConfidence}
               detectedMakeupTools={detectedTools}
-              facialAttributes={facialAttributes}
+              facialAttributes={{
+                age: facialAttributes.age,
+                gender: facialAttributes.gender,
+                expression: facialAttributes.expression,
+                skinType: facialAttributes.skinType
+              }}
             />
           )}
           

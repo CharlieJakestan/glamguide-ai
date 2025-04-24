@@ -1,5 +1,5 @@
 
-import { serve } from "http/server.ts";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const MAKEUP_KNOWLEDGE_BASE = {
   skinTones: {
@@ -84,10 +84,63 @@ const MAKEUP_KNOWLEDGE_BASE = {
       blush: 'Apply blush horizontally across your cheekbones to add width rather than length.',
       eyebrows: 'Straight or softly angled brows with minimal arch help balance the length of your face.'
     }
+  },
+  
+  makeupProducts: {
+    foundation: {
+      purpose: 'Creates an even base and covers imperfections',
+      applicationTechniques: ['Apply from center of face outward', 'Blend with beauty sponge or brush']
+    },
+    concealer: {
+      purpose: 'Conceals blemishes, dark circles and imperfections',
+      applicationTechniques: ['Pat gently, don\'t rub', 'Apply after foundation for more coverage']
+    },
+    blush: {
+      purpose: 'Adds color and dimension to the face',
+      applicationTechniques: ['Smile to find the apples of your cheeks', 'Blend upward toward temples']
+    },
+    bronzer: {
+      purpose: 'Adds warmth and dimension to the face',
+      applicationTechniques: ['Apply where sun naturally hits: forehead, cheekbones, jawline', 'Blend well for natural look']
+    },
+    highlighter: {
+      purpose: 'Brings forward features and adds a glow',
+      applicationTechniques: ['Apply to high points of face', 'Can be applied on brow bone, cheekbones, nose bridge']
+    },
+    eyeshadow: {
+      purpose: 'Adds color and dimension to the eyes',
+      applicationTechniques: ['Apply lightest shade all over lid', 'Medium shade in crease', 'Darkest shade in outer corner']
+    },
+    eyeliner: {
+      purpose: 'Defines eyes and can change their apparent shape',
+      applicationTechniques: ['Draw as close to lash line as possible', 'For winged liner, follow angle from lower lash line']
+    },
+    mascara: {
+      purpose: 'Darkens, lengthens, and thickens eyelashes',
+      applicationTechniques: ['Wiggle brush at base of lashes', 'Pull through to the tips']
+    },
+    lipstick: {
+      purpose: 'Adds color and definition to lips',
+      applicationTechniques: ['Line lips first for precision', 'Apply from center outward']
+    },
+    primer: {
+      purpose: 'Creates smooth base and helps makeup last longer',
+      applicationTechniques: ['Apply small amount all over face', 'Wait 1-2 minutes before applying foundation']
+    }
   }
 };
 
 serve(async (req) => {
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  };
+
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+  
   try {
     const { message, systemPrompt, context } = await req.json();
     
@@ -127,7 +180,7 @@ serve(async (req) => {
         if (result.choices && result.choices[0]?.message?.content) {
           return new Response(
             JSON.stringify({ response: result.choices[0].message.content }),
-            { headers: { "Content-Type": "application/json" } }
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
       } catch (openAIError) {
@@ -141,14 +194,14 @@ serve(async (req) => {
     
     return new Response(
       JSON.stringify({ response: localResponse }),
-      { headers: { "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
     return new Response(
       JSON.stringify({ error: error.message }),
       { 
         status: 400, 
-        headers: { "Content-Type": "application/json" } 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
       }
     );
   }
@@ -177,6 +230,23 @@ function generateLocalResponse(
     return `You have a ${faceShape} face shape. ${MAKEUP_KNOWLEDGE_BASE.faceShapes[faceShape]?.contour || 'Apply contour to create definition and structure'} and ${MAKEUP_KNOWLEDGE_BASE.faceShapes[faceShape]?.highlight || 'highlight the high points of your face for dimension'}.`;
   }
   
+  // Check for product-specific questions
+  if (input.includes('product') || input.includes('tool') || input.includes('brush')) {
+    const detectedProduct = context.tools && context.tools.length > 0 ? context.tools[0].toLowerCase() : null;
+    
+    if (detectedProduct) {
+      // Find the product in our knowledge base (approximate match)
+      const productType = Object.keys(MAKEUP_KNOWLEDGE_BASE.makeupProducts).find(
+        type => detectedProduct.includes(type.toLowerCase())
+      );
+      
+      if (productType) {
+        const productInfo = MAKEUP_KNOWLEDGE_BASE.makeupProducts[productType];
+        return `I see you're using what looks like a ${detectedProduct}! This ${productType} ${productInfo.purpose}. Pro tip: ${productInfo.applicationTechniques[0]}.`;
+      }
+    }
+  }
+  
   // Check for specific product or technique questions
   if (input.includes('eyeshadow') || input.includes('eye makeup')) {
     return "For eyeshadow application, start with a primer on your lids to prevent creasing and increase color payoff. Apply a light base shade all over, then define your crease with a medium tone using windshield wiper motions. Add a darker shade to the outer corner for depth, and finish with a shimmer on the lid for dimension. Always blend between each step for a seamless finish.";
@@ -200,7 +270,7 @@ function generateLocalResponse(
   }
   
   // Check if asking about detected tools
-  if (input.includes('tool') || input.includes('using') || input.includes('brush')) {
+  if (input.includes('using') || input.includes('what am i holding')) {
     if (context.tools && context.tools.length > 0) {
       return `I can see you're using ${context.tools.join(', ')}. That's perfect for ${context.currentStep || 'your current makeup application'}. Make sure to use gentle strokes and blend thoroughly for the most natural-looking finish.`;
     } else {

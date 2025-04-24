@@ -1,32 +1,173 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Card } from '@/components/ui/card';
+import { Mic, MicOff, Send, Sparkles, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Volume2, VolumeX, Mic, MicOff, BrainCircuit, MessageSquareMore, RefreshCw } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Progress } from '@/components/ui/progress';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { getCosmetologyKnowledge } from '@/services/ganService';
+import { Textarea } from '@/components/ui/textarea';
+import { supabase } from '@/lib/supabase';
+import { FacialAttributes, MovementData, DetectedAction, MakeupRegion, DetectedObject } from '@/types/facial-analysis';
+
+interface Message {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+}
 
 interface AdvancedAIAssistantProps {
-  facialTraits?: any;
+  facialTraits?: {
+    skinTone: string;
+    faceShape: string;
+    skinType?: string;
+    features: string[];
+    recommendations: string[];
+  } | null;
   currentStep?: string;
-  faceDetected?: boolean;
-  detectedTools?: Array<{type: string; confidence: number}>;
-  movementData?: any;
-  facialAttributes?: any;
-  detectedActions?: Array<{action: string; confidence: number; timestamp: number}>;
-  makeupRegions?: Array<{
-    type: string;
-    region: {
-      points: Array<{x: number, y: number}>;
-      center: {x: number, y: number};
-    };
-  }>;
+  faceDetected: boolean;
+  detectedTools?: Array<{ type: string; confidence: number }>;
+  movementData?: MovementData;
+  facialAttributes?: FacialAttributes;
+  detectedActions?: DetectedAction[];
+  makeupRegions?: MakeupRegion[];
   onExecuteCommand?: (command: string, params: Record<string, string>) => void;
   onApplyVirtualMakeup?: (makeup: any) => void;
 }
+
+const MAKEUP_KNOWLEDGE_BASE: {
+  skinTones: Record<string, Record<string, string>>;
+  faceShapes: Record<string, Record<string, string>>;
+  makeupProducts: Record<string, {
+    purpose: string;
+    applicationTechniques: string[];
+  }>;
+} = {
+  skinTones: {
+    'Fair': {
+      foundation: 'Look for foundations with neutral or slightly pink undertones.',
+      blush: 'Soft pink and peach blushes work well.',
+      lipstick: 'Avoid very dark shades which can appear harsh. Opt for rosy pinks, peachy nudes, or soft reds.',
+      eyeshadow: 'Cool-toned shades like taupes, soft grays, and lavenders complement well.'
+    },
+    'Light': {
+      foundation: 'Choose foundations with yellow, neutral, or slightly pink undertones.',
+      blush: 'Pink, peach, and coral blushes suit this skin tone.',
+      lipstick: 'Pink, coral, berry, and red shades work beautifully.',
+      eyeshadow: 'Both warm and cool tones work well, like bronze, copper, navy, and purple.'
+    },
+    'Medium': {
+      foundation: 'Look for foundations with golden or olive undertones.',
+      blush: 'Rich pinks, warm corals, and peachy shades complement medium skin.',
+      lipstick: 'Coral, berry, cranberry, and warm red shades flatter this skin tone.',
+      eyeshadow: 'Earth tones like bronze, copper, warm browns, and olive greens work well.'
+    },
+    'Olive': {
+      foundation: 'Choose foundations with yellow-green or golden undertones.',
+      blush: 'Terracotta, warm peach, and bronze blushes are flattering.',
+      lipstick: 'Rich berries, terracotta, warm browns, and cranberry shades enhance olive skin.',
+      eyeshadow: 'Bronze, gold, copper, and emerald green enhance the natural warmth.'
+    },
+    'Tan': {
+      foundation: 'Look for foundations with golden or warm undertones.',
+      blush: 'Rich corals, deep peaches, and bronze blushes work well.',
+      lipstick: 'Coral, orange-red, terracotta, and rich berry shades are flattering.',
+      eyeshadow: 'Golden bronzes, copper, warm browns, and mossy greens complement tan skin.'
+    },
+    'Deep': {
+      foundation: 'Choose foundations with red, golden, or neutral undertones.',
+      blush: 'Rich berries, deep corals, and warm bronzes add beautiful dimension.',
+      lipstick: 'Bold berries, plums, rich reds, and warm browns make a statement.',
+      eyeshadow: 'Gold, copper, bronze, rich purples, and emerald green create stunning looks.'
+    },
+    'Rich': {
+      foundation: 'Look for foundations with red, blue, or neutral undertones.',
+      blush: 'Deep berries, rich plums, and warm bronzes are most flattering.',
+      lipstick: 'Deep plums, rich berries, bold reds, and warm browns create gorgeous contrast.',
+      eyeshadow: 'Bold jewel tones, gold, bronze, and deep blues and purples create striking looks.'
+    }
+  },
+  
+  faceShapes: {
+    'Oval': {
+      highlight: 'Your face has naturally balanced proportions. Highlight the center of your forehead and chin.',
+      contour: 'Light contouring on the sides of your forehead and jawline can enhance your already balanced features.',
+      blush: 'Apply blush to the apples of your cheeks and blend upward toward your temples.',
+      eyebrows: 'Most brow shapes work well with an oval face. A soft arch complements your proportions.'
+    },
+    'Round': {
+      highlight: 'Highlight the center of your forehead, under your eyes, and the center of your chin.',
+      contour: 'Contour the sides of your forehead, below your cheekbones, and along your jawline to create definition.',
+      blush: 'Apply blush slightly above the hollows of your cheeks and blend toward your temples.',
+      eyebrows: 'Angled or high-arched brows can help elongate your face shape.'
+    },
+    'Square': {
+      highlight: 'Highlight the center of your forehead, under your eyes, and the center of your chin.',
+      contour: 'Contour the corners of your forehead and jawline to soften angular features.',
+      blush: 'Apply blush to the apples of your cheeks and blend upward for a softer look.',
+      eyebrows: 'Softly rounded or slightly angled brows with a less defined arch can soften angular features.'
+    },
+    'Heart': {
+      highlight: 'Highlight the center of your forehead, under your eyes, and the center of your chin.',
+      contour: 'Contour the sides of your forehead and temples. Add light contour to the tip of your chin.',
+      blush: 'Apply blush below the apples of your cheeks and blend outward to create balance.',
+      eyebrows: 'Rounded brows with a soft arch complement heart-shaped faces.'
+    },
+    'Diamond': {
+      highlight: 'Highlight the center of your forehead, high points of your cheekbones, and center of your chin.',
+      contour: 'Contour the sides of your forehead and jawline to soften the angles.',
+      blush: 'Apply blush horizontally across your cheekbones to add width to the center of your face.',
+      eyebrows: 'Softly curved brows with a subtle arch work well with diamond face shapes.'
+    },
+    'Rectangle': {
+      highlight: 'Highlight the center of your forehead, under your eyes, and the center of your chin.',
+      contour: 'Contour the top of your forehead, below your cheekbones, and along your jawline.',
+      blush: 'Apply blush horizontally across your cheekbones to add width rather than length.',
+      eyebrows: 'Straight or softly angled brows with minimal arch help balance the length of your face.'
+    }
+  },
+  
+  makeupProducts: {
+    foundation: {
+      purpose: 'Creates an even base and covers imperfections',
+      applicationTechniques: ['Apply from center of face outward', 'Blend with beauty sponge or brush']
+    },
+    concealer: {
+      purpose: 'Conceals blemishes, dark circles and imperfections',
+      applicationTechniques: ['Pat gently, don\'t rub', 'Apply after foundation for more coverage']
+    },
+    blush: {
+      purpose: 'Adds color and dimension to the face',
+      applicationTechniques: ['Smile to find the apples of your cheeks', 'Blend upward toward temples']
+    },
+    bronzer: {
+      purpose: 'Adds warmth and dimension to the face',
+      applicationTechniques: ['Apply where sun naturally hits: forehead, cheekbones, jawline', 'Blend well for natural look']
+    },
+    highlighter: {
+      purpose: 'Brings forward features and adds a glow',
+      applicationTechniques: ['Apply to high points of face', 'Can be applied on brow bone, cheekbones, nose bridge']
+    },
+    eyeshadow: {
+      purpose: 'Adds color and dimension to the eyes',
+      applicationTechniques: ['Apply lightest shade all over lid', 'Medium shade in crease', 'Darkest shade in outer corner']
+    },
+    eyeliner: {
+      purpose: 'Defines eyes and can change their apparent shape',
+      applicationTechniques: ['Draw as close to lash line as possible', 'For winged liner, follow angle from lower lash line']
+    },
+    mascara: {
+      purpose: 'Darkens, lengthens, and thickens eyelashes',
+      applicationTechniques: ['Wiggle brush at base of lashes', 'Pull through to the tips']
+    },
+    lipstick: {
+      purpose: 'Adds color and definition to lips',
+      applicationTechniques: ['Line lips first for precision', 'Apply from center outward']
+    },
+    primer: {
+      purpose: 'Creates smooth base and helps makeup last longer',
+      applicationTechniques: ['Apply small amount all over face', 'Wait 1-2 minutes before applying foundation']
+    }
+  }
+};
 
 const AdvancedAIAssistant: React.FC<AdvancedAIAssistantProps> = ({
   facialTraits,
@@ -40,601 +181,431 @@ const AdvancedAIAssistant: React.FC<AdvancedAIAssistantProps> = ({
   onExecuteCommand,
   onApplyVirtualMakeup
 }) => {
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      role: 'assistant',
+      content: 'Hello! I\'m your advanced AI makeup assistant. I can help with personalized makeup recommendations and application guidance. Let me know what you\'d like help with!',
+      timestamp: Date.now()
+    }
+  ]);
+  
+  const [input, setInput] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [messages, setMessages] = useState<Array<{role: string; content: string; timestamp: number}>>([
-    {role: 'assistant', content: 'Hello! I\'m your AI makeup assistant. I\'ll help guide you through your makeup application.', timestamp: Date.now()}
-  ]);
-  const [thinking, setThinking] = useState(false);
-  const [knowledge, setKnowledge] = useState<any>(null);
-  const [loadingKnowledge, setLoadingKnowledge] = useState(false);
+  const [speechRecognition, setSpeechRecognition] = useState<SpeechRecognition | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const lastDetectedToolRef = useRef<string | null>(null);
+  const lastDetectedActionRef = useRef<string | null>(null);
   
-  // Fetch cosmetology knowledge
+  // Setup speech recognition
   useEffect(() => {
-    const fetchKnowledge = async () => {
-      setLoadingKnowledge(true);
-      try {
-        const result = await getCosmetologyKnowledge();
-        if (result && result.status === 'ok' && result.knowledge) {
-          setKnowledge(result.knowledge);
+    if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      
+      recognition.onresult = (event) => {
+        const transcript = Array.from(event.results)
+          .map(result => result[0])
+          .map(result => result.transcript)
+          .join('');
+        
+        setInput(transcript);
+        
+        // Check for commands in real-time
+        const commandPhrases = [
+          { regex: /next( step)?/i, command: 'next', params: {} },
+          { regex: /previous( step)?|back/i, command: 'previous', params: {} },
+          { regex: /analyze( face)?|scan/i, command: 'analyze', params: {} },
+          { regex: /use (natural|bold|glam)/i, command: 'selectLook', params: (match: RegExpMatchArray) => ({ lookName: match[1] }) }
+        ];
+        
+        for (const { regex, command, params } of commandPhrases) {
+          const match = transcript.match(regex);
+          if (match && onExecuteCommand) {
+            const parameters = typeof params === 'function' ? params(match) : params;
+            onExecuteCommand(command, parameters);
+            setInput('');
+            recognition.stop();
+            break;
+          }
         }
-      } catch (error) {
-        console.error('Error fetching cosmetology knowledge:', error);
-      } finally {
-        setLoadingKnowledge(false);
+      };
+      
+      recognition.onend = () => {
+        if (isListening) {
+          recognition.start();
+        }
+      };
+      
+      setSpeechRecognition(recognition);
+    } else {
+      console.log('Speech recognition not supported');
+    }
+    
+    return () => {
+      if (speechRecognition) {
+        speechRecognition.stop();
       }
     };
-    
-    fetchKnowledge();
-  }, []);
+  }, [onExecuteCommand, isListening]);
   
-  // Scroll to bottom of messages
+  // Toggle speech recognition
+  const toggleListening = () => {
+    if (!speechRecognition) return;
+    
+    if (isListening) {
+      speechRecognition.stop();
+      setIsListening(false);
+    } else {
+      speechRecognition.start();
+      setIsListening(true);
+      setVoiceEnabled(true);
+    }
+  };
+  
+  // Scroll to bottom when messages change
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
   
-  // Process changes in detected actions
+  // Detect tools and provide guidance
   useEffect(() => {
-    if (detectedActions.length === 0) return;
-    
-    // Get the most recent action that hasn't been processed yet
-    const latestAction = detectedActions[0];
-    
-    // Skip if it's older than 3 seconds
-    if (Date.now() - latestAction.timestamp > 3000) return;
-    
-    // Process the action
-    processUserAction(latestAction.action, latestAction.confidence);
+    if (detectedTools.length > 0) {
+      const currentTool = detectedTools[0].type;
+      
+      // Only provide guidance if this is a new tool
+      if (lastDetectedToolRef.current !== currentTool) {
+        lastDetectedToolRef.current = currentTool;
+        
+        // Find product in knowledge base
+        const productType = Object.keys(MAKEUP_KNOWLEDGE_BASE.makeupProducts).find(
+          type => currentTool.toLowerCase().includes(type.toLowerCase())
+        );
+        
+        if (productType) {
+          const product = MAKEUP_KNOWLEDGE_BASE.makeupProducts[productType];
+          
+          const newMessage: Message = {
+            role: 'assistant',
+            content: `I see you're using a ${currentTool}! ${product.purpose}. Tip: ${product.applicationTechniques[0]}`,
+            timestamp: Date.now()
+          };
+          
+          setMessages(prev => [...prev, newMessage]);
+        }
+      }
+    } else {
+      lastDetectedToolRef.current = null;
+    }
+  }, [detectedTools]);
+  
+  // Respond to user actions
+  useEffect(() => {
+    if (detectedActions.length > 0) {
+      const currentAction = detectedActions[0].action;
+      
+      // Only provide guidance if this is a new action with high confidence
+      if (lastDetectedActionRef.current !== currentAction && detectedActions[0].confidence > 0.7) {
+        lastDetectedActionRef.current = currentAction;
+        
+        // Add specific responses for certain actions
+        if (currentAction === "started smiling") {
+          const newMessage: Message = {
+            role: 'assistant',
+            content: "I see you're smiling! Your makeup is looking great so far.",
+            timestamp: Date.now()
+          };
+          
+          setMessages(prev => [...prev, newMessage]);
+        } else if (currentAction === "opened mouth" && Math.random() < 0.3) {
+          // Only respond sometimes to avoid being annoying
+          const newMessage: Message = {
+            role: 'assistant',
+            content: "Try keeping your mouth relaxed while applying eye makeup for better precision.",
+            timestamp: Date.now()
+          };
+          
+          setMessages(prev => [...prev, newMessage]);
+        }
+      }
+    } else {
+      lastDetectedActionRef.current = null;
+    }
   }, [detectedActions]);
   
-  // Process step changes
-  useEffect(() => {
-    if (!currentStep) return;
+  // Handle message sending
+  const sendMessage = async () => {
+    if (!input.trim()) return;
     
-    // Check if this is a new step we haven't announced yet
-    const previousMessage = messages[messages.length - 1];
-    if (previousMessage?.content?.includes(currentStep)) return;
-    
-    // Add the new step instruction
-    addAssistantMessage(`Let's move to the next step: ${currentStep}`);
-  }, [currentStep]);
-  
-  // Process detected tools
-  useEffect(() => {
-    if (detectedTools.length === 0) return;
-    
-    // Get the most recently detected tool
-    const latestTool = detectedTools[0];
-    
-    // Skip if confidence is too low
-    if (latestTool.confidence < 0.7) return;
-    
-    // Check if we've already mentioned this tool recently
-    const recentMessages = messages.slice(-5);
-    const alreadyMentioned = recentMessages.some(msg => 
-      msg.content.toLowerCase().includes(latestTool.type.toLowerCase())
-    );
-    
-    if (alreadyMentioned) return;
-    
-    // Add a message about the detected tool
-    addAssistantMessage(`I see you're using a ${latestTool.type}. Great choice!`);
-    
-    // If we have knowledge about this tool, provide tips
-    if (knowledge) {
-      const toolType = latestTool.type.toLowerCase();
-      
-      // Check if it's a brush or specific product
-      if (toolType.includes('brush')) {
-        const brushType = Object.keys(knowledge.products).find(product => 
-          toolType.includes(product.toLowerCase())
-        );
-        
-        if (brushType && knowledge.products[brushType]) {
-          const productInfo = knowledge.products[brushType];
-          const techniques = knowledge.techniques[brushType] || [];
-          
-          if (techniques.length > 0) {
-            // Choose a random technique tip
-            const randomTip = techniques[Math.floor(Math.random() * techniques.length)];
-            addAssistantMessage(`Tip for ${brushType} application: ${randomTip}`);
-          }
-        }
-      } else {
-        // It's a product, not a brush
-        const productType = Object.keys(knowledge.products).find(product => 
-          toolType.includes(product.toLowerCase())
-        );
-        
-        if (productType && knowledge.products[productType]) {
-          const productInfo = knowledge.products[productType];
-          addAssistantMessage(`For best ${productType} application: ${productInfo.purpose}`);
-        }
-      }
-    }
-  }, [detectedTools, knowledge]);
-  
-  // Add assistant message
-  const addAssistantMessage = (content: string) => {
-    setMessages(prev => [...prev, {
-      role: 'assistant',
-      content,
-      timestamp: Date.now()
-    }]);
-    
-    // Speak the message if voice is enabled
-    if (voiceEnabled) {
-      speakText(content);
-    }
-  };
-  
-  // Add user message
-  const addUserMessage = (content: string) => {
-    setMessages(prev => [...prev, {
+    const userMessage: Message = {
       role: 'user',
-      content,
+      content: input,
       timestamp: Date.now()
-    }]);
+    };
     
-    // Process user message
-    processUserMessage(content);
-  };
-  
-  // Process user action
-  const processUserAction = (action: string, confidence: number) => {
-    // Skip low confidence actions
-    if (confidence < 0.7) return;
+    setMessages(prev => [...prev, userMessage]);
+    setInput('');
+    setIsProcessing(true);
     
-    // Check if this is a significant action that should get a response
-    if (
-      action.includes('smil') ||
-      action.includes('head') ||
-      action.includes('expressing')
-    ) {
-      // React to the action
-      switch (true) {
-        case action.includes('smil'):
-          addAssistantMessage("I see you're smiling! Your makeup looks great!");
-          break;
-        case action.includes('head turned'):
-          addAssistantMessage("I notice you're turning your head to check the angles. Good thinking!");
-          break;
-        case action.includes('expressing happy'):
-          addAssistantMessage("You seem happy with your progress. That's great!");
-          break;
-        case action.includes('expressing surprised'):
-          addAssistantMessage("Did something surprise you? Let me know if you need any help.");
-          break;
-        default:
-          // Don't react to every action to avoid being too chatty
-          break;
-      }
-    }
-  };
-  
-  // Process user message
-  const processUserMessage = (message: string) => {
-    const lowerMessage = message.toLowerCase();
-    
-    // Show thinking state
-    setThinking(true);
-    
-    // Simulate AI processing delay
-    setTimeout(() => {
-      // Handle commands
-      if (lowerMessage.includes('next step') || lowerMessage.includes('next instruction')) {
-        onExecuteCommand?.('next', {});
-        addAssistantMessage("Moving to the next step!");
-      } else if (lowerMessage.includes('previous step') || lowerMessage.includes('go back')) {
-        onExecuteCommand?.('previous', {});
-        addAssistantMessage("Going back to the previous step.");
-      } else if (lowerMessage.includes('analyze') || lowerMessage.includes('detection')) {
-        onExecuteCommand?.('analyze', {});
-        addAssistantMessage("I'll analyze your face again now.");
-      } else if (lowerMessage.includes('natural look') || lowerMessage.includes('natural makeup')) {
-        onExecuteCommand?.('selectLook', { lookName: 'natural' });
-        addAssistantMessage("I've selected a natural makeup look for you.");
+    try {
+      // Prepare context for the AI
+      const context = {
+        facialTraits,
+        currentStep,
+        faceDetected,
+        tools: detectedTools.map(tool => tool.type),
+        facialAttributes,
+        recentActions: detectedActions.map(action => action.action)
+      };
+      
+      // Send message to edge function
+      const { data, error } = await supabase.functions.invoke('ai-makeup-assistant', {
+        body: {
+          message: input,
+          systemPrompt: "You are an advanced makeup assistant AI. Provide personalized, helpful advice based on the user's facial features and makeup context.",
+          context
+        },
+      });
+      
+      if (error) throw error;
+      
+      const assistantMessage: Message = {
+        role: 'assistant',
+        content: data.response || "I'm sorry, I couldn't process that request.",
+        timestamp: Date.now()
+      };
+      
+      setMessages(prev => [...prev, assistantMessage]);
+      
+      // Check for special commands in the response
+      const applyLipstickMatch = assistantMessage.content.match(/apply ([\w\s]+) lipstick/i);
+      const changeBlushMatch = assistantMessage.content.match(/try ([\w\s]+) blush/i);
+      
+      if (onApplyVirtualMakeup) {
+        if (applyLipstickMatch) {
+          const lipColor = getLipColorFromDescription(applyLipstickMatch[1]);
+          onApplyVirtualMakeup({
+            lips: { color: lipColor, intensity: 0.7, glossy: true }
+          });
+        }
         
-        // Apply natural makeup settings
-        onApplyVirtualMakeup?.({
-          lips: { color: 'rgba(220, 150, 150, 0.5)', intensity: 0.5, glossy: true },
-          eyes: { color: 'rgba(180, 160, 140, 0.4)', intensity: 0.4 },
-          cheeks: { color: 'rgba(230, 180, 160, 0.4)', intensity: 0.3 },
-          foundation: { color: 'rgba(245, 222, 190, 0.2)', coverage: 0.2 }
-        });
-      } else if (lowerMessage.includes('glam') || lowerMessage.includes('dramatic')) {
-        onExecuteCommand?.('selectLook', { lookName: 'glam' });
-        addAssistantMessage("I've selected a glamorous makeup look for you.");
+        if (changeBlushMatch) {
+          const blushColor = getBlushColorFromDescription(changeBlushMatch[1]);
+          onApplyVirtualMakeup({
+            cheeks: { color: blushColor, intensity: 0.5 }
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      
+      const errorMessage: Message = {
+        role: 'assistant',
+        content: "I'm having trouble connecting right now. Let me try to help with what I know.",
+        timestamp: Date.now()
+      };
+      
+      setMessages(prev => [...prev, errorMessage]);
+      
+      // Provide simple offline response based on available context
+      if (facialTraits) {
+        const offlineHelp: Message = {
+          role: 'assistant',
+          content: generateOfflineResponse(input, facialTraits),
+          timestamp: Date.now() + 100
+        };
         
-        // Apply glam makeup settings
-        onApplyVirtualMakeup?.({
-          lips: { color: 'rgba(220, 50, 90, 0.8)', intensity: 0.8, glossy: false },
-          eyes: { color: 'rgba(60, 60, 80, 0.7)', intensity: 0.7 },
-          cheeks: { color: 'rgba(250, 120, 120, 0.6)', intensity: 0.6 },
-          foundation: { color: 'rgba(245, 222, 179, 0.4)', coverage: 0.4 }
-        });
-      } else if (lowerMessage.includes('help') || lowerMessage.includes('what can you do')) {
-        addAssistantMessage(
-          "I can help you with your makeup application! You can ask me to:\n\n" +
-          "- Move to the next or previous step\n" +
-          "- Switch to a different makeup look (natural, glam, etc.)\n" +
-          "- Provide tips for specific products\n" +
-          "- Analyze your face\n" +
-          "- Get recommendations based on your skin tone and face shape"
-        );
-      } else if (lowerMessage.includes('face shape') && facialAttributes?.faceShape) {
-        // Provide face shape tips
-        if (knowledge?.faceShapes && facialAttributes.faceShape) {
-          const shape = facialAttributes.faceShape.toLowerCase();
-          const shapeInfo = knowledge.faceShapes[shape];
-          
-          if (shapeInfo) {
-            addAssistantMessage(
-              `Your face shape is ${facialAttributes.faceShape}. Here are some tips:\n\n` +
-              shapeInfo.makeupTips.join('\n\n')
-            );
-          } else {
-            addAssistantMessage(`Your face shape is ${facialAttributes.faceShape}, which works well with most makeup styles!`);
-          }
-        } else {
-          addAssistantMessage(`Your face shape is ${facialAttributes.faceShape}. This shape works well with most makeup styles!`);
-        }
-      } else if (lowerMessage.includes('skin tone') && facialAttributes?.skinTone) {
-        // Provide skin tone tips
-        if (knowledge?.skinTones && facialAttributes.skinTone) {
-          const tone = facialAttributes.skinTone.toLowerCase();
-          const toneInfo = knowledge.skinTones[tone];
-          
-          if (toneInfo) {
-            addAssistantMessage(
-              `Your skin tone is ${facialAttributes.skinTone}. Here are some tips:\n\n` +
-              toneInfo.makeupTips.join('\n\n')
-            );
-          } else {
-            addAssistantMessage(`Your skin tone is ${facialAttributes.skinTone}. It's beautiful!`);
-          }
-        } else {
-          addAssistantMessage(`Your skin tone is ${facialAttributes.skinTone}. It's beautiful!`);
-        }
-      } else {
-        // Generic response for other queries
-        addAssistantMessage(getGenericResponse(message));
+        setMessages(prev => [...prev, offlineHelp]);
       }
-      
-      setThinking(false);
-    }, 1000);
+    } finally {
+      setIsProcessing(false);
+    }
   };
   
-  // Get generic response
-  const getGenericResponse = (message: string) => {
-    const lowerMessage = message.toLowerCase();
-    const responses = [
-      "I'm here to help with your makeup application! What would you like to know?",
-      "That's a great question! Let me think about that...",
-      "I'm focusing on helping you with makeup right now. Is there something specific about your makeup look you'd like help with?",
-      "I understand what you're asking. Let me try to help you with that."
-    ];
+  // Generate a simple offline response based on local knowledge
+  const generateOfflineResponse = (query: string, traits: any): string => {
+    const queryLower = query.toLowerCase();
     
-    // Check for product-specific questions
-    if (knowledge?.products) {
-      for (const [product, info] of Object.entries(knowledge.products)) {
-        if (lowerMessage.includes(product.toLowerCase())) {
-          return `About ${product}: ${info.purpose}. It's best applied with ${info.applicationTechniques.join(' or ')}.`;
-        }
+    // Check for questions about skin tone
+    if (queryLower.includes('skin tone') || queryLower.includes('foundation')) {
+      const skinTone = traits.skinTone || 'Medium';
+      return `Based on your ${skinTone} skin tone, ${MAKEUP_KNOWLEDGE_BASE.skinTones[skinTone]?.foundation || 'I recommend finding foundations with neutral or golden undertones'}.`;
+    }
+    
+    // Check for questions about face shape
+    if (queryLower.includes('face shape') || queryLower.includes('contour')) {
+      const faceShape = traits.faceShape || 'Oval';
+      return `You have a ${faceShape} face shape. ${MAKEUP_KNOWLEDGE_BASE.faceShapes[faceShape]?.contour || 'Apply contour to create definition and structure'}.`;
+    }
+    
+    // Default response
+    return "I can provide better assistance when connected to the server, but based on what I can see, focus on enhancing your natural features and applying products in thin layers for the most natural finish.";
+  };
+  
+  // Helper functions for color selection
+  const getLipColorFromDescription = (description: string): string => {
+    const colorMap: Record<string, string> = {
+      'red': '#FF0000',
+      'pink': '#FF69B4',
+      'nude': '#CC9966',
+      'berry': '#990066',
+      'coral': '#FF7F50',
+      'orange': '#FF4500',
+      'plum': '#8E4585',
+      'burgundy': '#800020',
+      'mauve': '#E0B0FF'
+    };
+    
+    for (const [key, value] of Object.entries(colorMap)) {
+      if (description.toLowerCase().includes(key)) {
+        return value;
       }
     }
     
-    // Check for technique questions
-    if (lowerMessage.includes('how to') || lowerMessage.includes('technique')) {
-      const techniques = [
-        "Start by applying products from the center of your face outward for the most natural look.",
-        "For precise application, use a small brush and build up gradually.",
-        "Always blend thoroughly to avoid harsh lines.",
-        "Use gentle patting motions rather than wiping for better product application."
-      ];
-      
-      return techniques[Math.floor(Math.random() * techniques.length)];
-    }
-    
-    return responses[Math.floor(Math.random() * responses.length)];
+    return '#FF5555'; // Default pink-red
   };
   
-  // Text-to-speech function
-  const speakText = (text: string) => {
-    if (!('speechSynthesis' in window)) return;
+  const getBlushColorFromDescription = (description: string): string => {
+    const colorMap: Record<string, string> = {
+      'pink': '#FF9999',
+      'peach': '#FFCC99',
+      'coral': '#FF7F50',
+      'rose': '#E8ADAA',
+      'berry': '#990066',
+      'plum': '#8E4585',
+      'bronze': '#CD7F32',
+      'terracotta': '#E2725B'
+    };
     
-    // Create utterance
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-    utterance.volume = 0.8;
-    
-    // Use a female voice if available
-    const voices = window.speechSynthesis.getVoices();
-    const femaleVoice = voices.find(voice => voice.name.includes('Female') || voice.name.includes('Google'));
-    if (femaleVoice) {
-      utterance.voice = femaleVoice;
+    for (const [key, value] of Object.entries(colorMap)) {
+      if (description.toLowerCase().includes(key)) {
+        return value;
+      }
     }
     
-    // Speak
-    window.speechSynthesis.speak(utterance);
+    return '#FFAAAA'; // Default soft pink
   };
   
-  // Toggle voice
-  const toggleVoice = () => {
-    setVoiceEnabled(!voiceEnabled);
-    
-    if (!voiceEnabled) {
-      speakText("Voice guidance activated. I'll help you through your makeup routine.");
-    }
-  };
-  
-  // Handle voice command
-  const handleVoiceCommand = () => {
-    // In a real implementation, this would use the Web Speech API
-    // For now, we'll simulate it
-    setIsListening(true);
-    
-    // Simulate listening for 3 seconds
-    setTimeout(() => {
-      setIsListening(false);
+  // Status indicators
+  const renderStatusIndicators = () => (
+    <div className="flex flex-wrap gap-1 mb-2">
+      <Badge
+        variant={faceDetected ? "default" : "outline"}
+        className={`${faceDetected ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'} text-xs`}
+      >
+        {faceDetected ? 'Face Detected' : 'No Face Detected'}
+      </Badge>
       
-      // Simulate a random voice command
-      const commands = [
-        "Next step please",
-        "Give me tips for this foundation",
-        "How does my blush look?",
-        "Show me a natural look"
-      ];
+      {detectedTools.length > 0 && (
+        <Badge className="bg-purple-100 text-purple-800 text-xs">
+          {detectedTools[0].type}
+        </Badge>
+      )}
       
-      const randomCommand = commands[Math.floor(Math.random() * commands.length)];
-      addUserMessage(randomCommand);
-    }, 3000);
-  };
+      {currentStep && (
+        <Badge className="bg-blue-100 text-blue-800 text-xs">
+          {currentStep}
+        </Badge>
+      )}
+      
+      {facialAttributes?.expression && (
+        <Badge className="bg-yellow-100 text-yellow-800 text-xs">
+          {facialAttributes.expression}
+        </Badge>
+      )}
+      
+      {makeupRegions.length > 0 && (
+        <Badge className="bg-indigo-100 text-indigo-800 text-xs">
+          {makeupRegions.length} Makeup Regions
+        </Badge>
+      )}
+    </div>
+  );
   
   return (
     <Card className="h-full flex flex-col">
-      <div className="p-4 border-b flex items-center justify-between bg-gradient-to-r from-purple-100 to-pink-100">
-        <div className="flex items-center">
-          <BrainCircuit className="h-5 w-5 text-purple-600 mr-2" />
-          <h3 className="font-medium text-purple-800">AI Makeup Assistant</h3>
-        </div>
+      <div className="p-3 bg-gradient-to-r from-pink-100 to-purple-100 flex justify-between items-center">
+        <h3 className="font-medium text-purple-900 flex items-center">
+          <Sparkles className="h-4 w-4 mr-1 text-purple-600" />
+          AI Makeup Assistant
+        </h3>
         
-        <div className="flex items-center space-x-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleVoice}
-            className={voiceEnabled ? "text-purple-600" : "text-gray-400"}
-            title={voiceEnabled ? "Disable voice" : "Enable voice"}
-          >
-            {voiceEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-          </Button>
-          
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleVoiceCommand}
-            className={isListening ? "text-purple-600 animate-pulse" : "text-gray-400"}
-            disabled={isListening}
-            title="Voice command"
-          >
-            {isListening ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
-          </Button>
-        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-purple-700 hover:text-purple-900 hover:bg-purple-200"
+          onClick={toggleListening}
+        >
+          {isListening ? (
+            <MicOff className="h-4 w-4" />
+          ) : (
+            <Mic className="h-4 w-4" />
+          )}
+        </Button>
       </div>
       
-      <Tabs defaultValue="chat" className="flex-1 flex flex-col">
-        <TabsList className="grid grid-cols-3 mx-4 mt-4">
-          <TabsTrigger value="chat" className="flex items-center">
-            <MessageSquareMore className="h-4 w-4 mr-2" /> Chat
-          </TabsTrigger>
-          <TabsTrigger value="tools" className="flex items-center">
-            Tools {detectedTools.length > 0 && <Badge className="ml-1 h-5 w-5 p-0 flex items-center justify-center">{detectedTools.length}</Badge>}
-          </TabsTrigger>
-          <TabsTrigger value="analysis" className="flex items-center">
-            Analysis
-          </TabsTrigger>
-        </TabsList>
+      <div className="p-3 flex-grow overflow-hidden flex flex-col">
+        {renderStatusIndicators()}
         
-        <TabsContent value="chat" className="flex-1 flex flex-col p-0 m-0">
-          <ScrollArea className="flex-1 p-4">
-            <div className="space-y-4">
-              {messages.map((msg, index) => (
-                <div key={index} className={`flex ${msg.role === 'assistant' ? 'justify-start' : 'justify-end'}`}>
-                  <div
-                    className={`max-w-[80%] rounded-lg p-3 ${
-                      msg.role === 'assistant'
-                        ? 'bg-purple-100 text-purple-900'
-                        : 'bg-blue-100 text-blue-900'
-                    }`}
-                  >
-                    <p className="text-sm whitespace-pre-line">{msg.content}</p>
-                    <p className="text-xs opacity-50 mt-1">
-                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
-                </div>
-              ))}
-              
-              {thinking && (
-                <div className="flex justify-start">
-                  <div className="max-w-[80%] rounded-lg p-3 bg-purple-100 text-purple-900">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                      <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '200ms' }}></div>
-                      <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '400ms' }}></div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              <div ref={messagesEndRef} />
+        <div className="flex-grow overflow-y-auto space-y-4 pb-2">
+          {messages.map((message, index) => (
+            <div 
+              key={index} 
+              className={`${
+                message.role === 'user' 
+                  ? 'ml-auto bg-purple-100 text-purple-800' 
+                  : 'mr-auto bg-gray-100 text-gray-800'
+              } rounded-lg p-3 max-w-[80%]`}
+            >
+              <p className="text-sm">{message.content}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {new Date(message.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+              </p>
             </div>
-          </ScrollArea>
-          
-          <div className="p-4 border-t mt-auto">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const formData = new FormData(e.currentTarget);
-                const message = formData.get('message') as string;
-                if (message.trim()) {
-                  addUserMessage(message);
-                  e.currentTarget.reset();
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
+        
+        <div className="pt-3 border-t mt-2">
+          <div className="flex items-center space-x-2">
+            <Textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ask about makeup or say 'next' to go to the next step..."
+              className="min-h-[60px]"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage();
                 }
               }}
-              className="flex space-x-2"
+            />
+            <Button 
+              onClick={sendMessage}
+              disabled={isProcessing || !input.trim()}
+              size="sm"
+              className="shrink-0"
             >
-              <input
-                type="text"
-                name="message"
-                placeholder="Ask me for makeup help..."
-                className="flex-1 border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"
-              />
-              <Button type="submit">Send</Button>
-            </form>
-          </div>
-        </TabsContent>
-        
-        <TabsContent value="tools" className="space-y-4 p-4 h-full">
-          <div>
-            <h3 className="font-medium mb-2">Detected Makeup Tools</h3>
-            {detectedTools.length > 0 ? (
-              <ul className="space-y-2">
-                {detectedTools.map((tool, idx) => (
-                  <li key={idx} className="bg-purple-50 p-2 rounded-lg flex justify-between items-center">
-                    <span>{tool.type}</span>
-                    <Badge variant="secondary">
-                      {Math.round(tool.confidence * 100)}%
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-gray-500">No makeup tools detected. Hold up brushes or products so I can see them.</p>
-            )}
+              {isProcessing ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </Button>
           </div>
           
-          <div>
-            <h3 className="font-medium mb-2">Makeup Knowledge Base</h3>
-            {loadingKnowledge ? (
-              <div className="flex items-center justify-center p-4">
-                <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                <span>Loading makeup knowledge...</span>
-              </div>
-            ) : knowledge ? (
-              <div className="space-y-2">
-                <p className="text-sm">Products in knowledge base: {Object.keys(knowledge.products).length}</p>
-                <div className="flex flex-wrap gap-2">
-                  {Object.keys(knowledge.products).slice(0, 6).map(product => (
-                    <Badge key={product} variant="outline">{product}</Badge>
-                  ))}
-                  {Object.keys(knowledge.products).length > 6 && (
-                    <Badge variant="outline">+{Object.keys(knowledge.products).length - 6} more</Badge>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500">Cosmetology knowledge base not available.</p>
-            )}
-          </div>
-          
-          <div>
-            <h3 className="font-medium mb-2">Current Step</h3>
-            {currentStep ? (
-              <p className="bg-purple-50 p-3 rounded text-sm">{currentStep}</p>
-            ) : (
-              <p className="text-sm text-gray-500">No current step selected.</p>
-            )}
-          </div>
-        </TabsContent>
-        
-        <TabsContent value="analysis" className="space-y-4 p-4 h-full">
-          <div>
-            <h3 className="font-medium mb-2">Face Detection</h3>
-            <div className="flex items-center">
-              <div className={`h-3 w-3 rounded-full mr-2 ${faceDetected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-              <span>{faceDetected ? 'Face Detected' : 'No Face Detected'}</span>
-            </div>
-            {faceDetected && (
-              <Progress value={detectionConfidence * 100} className="mt-2" />
-            )}
-          </div>
-          
-          <div>
-            <h3 className="font-medium mb-2">Facial Attributes</h3>
-            {facialAttributes && (
-              <div className="space-y-2 text-sm">
-                {facialAttributes.skinTone && (
-                  <div className="flex justify-between">
-                    <span>Skin Tone:</span>
-                    <Badge variant="outline">{facialAttributes.skinTone}</Badge>
-                  </div>
-                )}
-                {facialAttributes.faceShape && (
-                  <div className="flex justify-between">
-                    <span>Face Shape:</span>
-                    <Badge variant="outline">{facialAttributes.faceShape}</Badge>
-                  </div>
-                )}
-                {facialAttributes.features && facialAttributes.features.length > 0 && (
-                  <div>
-                    <span className="block mb-1">Features:</span>
-                    <div className="flex flex-wrap gap-2">
-                      {facialAttributes.features.map((feature, idx) => (
-                        <Badge key={idx} variant="outline" className="text-xs">{feature}</Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          
-          <div>
-            <h3 className="font-medium mb-2">Recent Actions</h3>
-            {detectedActions.length > 0 ? (
-              <ul className="space-y-2">
-                {detectedActions.slice(0, 4).map((action, idx) => (
-                  <li key={idx} className="bg-gray-50 p-2 rounded-lg text-sm flex justify-between">
-                    <span>{action.action}</span>
-                    <span className="text-gray-400 text-xs">
-                      {Math.round((Date.now() - action.timestamp) / 1000)}s ago
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-gray-500">No recent actions detected.</p>
-            )}
-          </div>
-          
-          <div>
-            <h3 className="font-medium mb-2">Makeup Regions</h3>
-            {makeupRegions.length > 0 ? (
-              <ul className="text-sm space-y-1">
-                {Array.from(new Set(makeupRegions.map(r => r.type))).map((type) => (
-                  <li key={type} className="flex items-center">
-                    <div
-                      className="h-3 w-3 rounded-full mr-2"
-                      style={{ 
-                        backgroundColor: makeupRegions.find(r => r.type === type)?.color || '#888' 
-                      }}
-                    ></div>
-                    {type}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-gray-500">No makeup regions detected.</p>
-            )}
-          </div>
-        </TabsContent>
-      </Tabs>
+          {isListening && (
+            <p className="text-xs text-center mt-1 text-purple-600 animate-pulse">
+              Listening...
+            </p>
+          )}
+        </div>
+      </div>
     </Card>
   );
 };

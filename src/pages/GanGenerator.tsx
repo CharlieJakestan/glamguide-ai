@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '@/components/Layout';
 import { useToast } from '@/hooks/use-toast';
@@ -17,6 +18,7 @@ import { useAnalysisSetup } from '@/hooks/useAnalysisSetup';
 import { useMakeupObjectDetection } from '@/hooks/useMakeupObjectDetection';
 import { Loader2 } from 'lucide-react';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { MovementData, DetectedObject } from '@/types/facial-analysis';
 
 const GanGenerator = () => {
   const { toast } = useToast();
@@ -320,9 +322,16 @@ const GanGenerator = () => {
               videoRef={videoRef}
               canvasRef={canvasRef}
               faceDetected={faceDetected}
-              movementData={movementData}
+              movementData={{
+                x: movementData?.headPose?.yaw || 0,
+                y: movementData?.headPose?.pitch || 0,
+                magnitude: movementData?.magnitude || 0
+              }}
               lastActivity={lastActivity}
-              nearbyObjects={detectedObjects}
+              nearbyObjects={detectedObjects.map(obj => ({
+                type: obj.type,
+                position: obj.position
+              }))}
               detectedMakeupTools={detectedMakeupTools}
             />
           )}
