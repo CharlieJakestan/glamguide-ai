@@ -14,29 +14,30 @@ const errorTracking = {
 // Check if the GAN function is available and working
 export const checkGanFunction = async (): Promise<boolean> => {
   try {
-    console.log('Checking GAN Edge Function availability...');
+    console.log('Checking AI Makeup Manager Function availability...');
     
     // Simple ping to the function with minimal data
-    const { data, error } = await supabase.functions.invoke('get-gan-model', {
-      body: { style: 'ping_test' },
+    const { data, error } = await supabase.functions.invoke('ai-makeup-manager', {
+      body: { action: 'check-status' },
     });
     
     if (error) {
-      console.error('Error checking GAN function:', error);
+      console.error('Error checking AI Makeup Manager function:', error);
       recordError('check_function', error.message);
       return false;
     }
     
     // If we get any response with status field, consider it working
-    const isWorking = data && typeof data === 'object' && 'status' in data;
+    const isWorking = data && typeof data === 'object' && data.status === 'ok';
     
     if (isWorking) {
       resetErrorTracking();
+      console.log('AI Makeup Manager is operational:', data);
     }
     
     return isWorking;
   } catch (error) {
-    console.error('Exception checking GAN function:', error);
+    console.error('Exception checking AI Makeup Manager function:', error);
     recordError('check_function_exception', error instanceof Error ? error.message : String(error));
     return false;
   }
@@ -65,7 +66,7 @@ const resetErrorTracking = () => {
   errorTracking.isInSimulationMode = false;
 };
 
-// Analyze a facial image using the GAN model
+// Analyze a facial image using the AI Makeup Manager
 export const analyzeFacialImage = async (
   imageBase64: string,
   lookId?: string
@@ -73,54 +74,127 @@ export const analyzeFacialImage = async (
   try {
     console.log('Analyzing facial image...');
     
-    // If we're in simulation mode due to previous errors, skip actual API call
-    if (errorTracking.isInSimulationMode) {
-      console.warn('Using simulation mode for analysis due to previous errors');
-      return mockAnalysisResponse(imageBase64, lookId);
-    }
-    
-    // First check if the edge function is available
+    // Check if the edge function is available
     const functionAvailable = await checkGanFunction();
     if (!functionAvailable) {
-      console.warn('GAN function not available, using mock data');
-      return mockAnalysisResponse(imageBase64, lookId);
+      console.warn('AI Makeup Manager function not available, trying fallback');
+      
+      // Try one more time with direct call to the function
+      try {
+        const { data, error } = await supabase.functions.invoke('ai-makeup-manager', {
+          body: { 
+            action: 'analyze-face',
+            image: imageBase64,
+            lookId
+          },
+        });
+        
+        if (error) {
+          throw new Error(`Error calling AI Makeup Manager: ${error.message}`);
+        }
+        
+        if (data && data.status === 'ok') {
+          console.log('Successfully received analysis from AI Makeup Manager');
+          resetErrorTracking();
+          return data;
+        } else {
+          throw new Error('Invalid response from AI Makeup Manager');
+        }
+      } catch (retryError) {
+        console.error('Retry failed:', retryError);
+        recordError('analyze_retry', retryError instanceof Error ? retryError.message : String(retryError));
+        return getFallbackAnalysis(imageBase64, lookId);
+      }
     }
     
-    // Try to call the edge function with the image data
+    // Call the edge function with the image data
     try {
-      const { data, error } = await supabase.functions.invoke('get-gan-model', {
+      const { data, error } = await supabase.functions.invoke('ai-makeup-manager', {
         body: { 
-          action: 'analyze',
+          action: 'analyze-face',
           image: imageBase64,
           lookId
         },
       });
       
       if (error) {
-        console.error('Error calling GAN function for analysis:', error);
+        console.error('Error calling AI Makeup Manager for analysis:', error);
         recordError('analyze_call', error.message);
-        return mockAnalysisResponse(imageBase64, lookId);
+        return getFallbackAnalysis(imageBase64, lookId);
       }
       
       if (data && data.status === 'ok') {
-        console.log('Received analysis from GAN function');
+        console.log('Received analysis from AI Makeup Manager');
         resetErrorTracking();
         return data;
       } else {
-        console.warn('Unexpected response from GAN function:', data);
+        console.warn('Unexpected response from AI Makeup Manager:', data);
         recordError('analyze_response', 'Unexpected response format');
-        return mockAnalysisResponse(imageBase64, lookId);
+        return getFallbackAnalysis(imageBase64, lookId);
       }
     } catch (functionError) {
-      console.error('Exception calling GAN function:', functionError);
+      console.error('Exception calling AI Makeup Manager:', functionError);
       recordError('analyze_exception', functionError instanceof Error ? functionError.message : String(functionError));
-      return mockAnalysisResponse(imageBase64, lookId);
+      return getFallbackAnalysis(imageBase64, lookId);
     }
   } catch (error) {
     console.error('Error analyzing facial image:', error);
     recordError('analyze_outer', error instanceof Error ? error.message : String(error));
     // Always return a valid response to avoid breaking the UI
-    return mockAnalysisResponse(imageBase64, lookId);
+    return getFallbackAnalysis(imageBase64, lookId);
+  }
+};
+
+// Detect products in an image
+export const detectMakeupProducts = async (
+  imageBase64: string
+): Promise<any> => {
+  try {
+    console.log('Detecting makeup products...');
+    
+    const { data, error } = await supabase.functions.invoke('ai-makeup-manager', {
+      body: { 
+        action: 'product-detection',
+        image: imageBase64
+      },
+    });
+    
+    if (error) {
+      console.error('Error detecting makeup products:', error);
+      return { status: 'error', error: error.message };
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error in product detection:', error);
+    return { 
+      status: 'error', 
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+};
+
+// Get cosmetology knowledge
+export const getCosmetologyKnowledge = async (): Promise<any> => {
+  try {
+    console.log('Getting cosmetology knowledge...');
+    
+    const { data, error } = await supabase.functions.invoke('ai-makeup-manager', {
+      body: { action: 'get-cosmetology-knowledge' },
+    });
+    
+    if (error) {
+      console.error('Error getting cosmetology knowledge:', error);
+      return { status: 'error', error: error.message };
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error getting cosmetology knowledge:', error);
+    return { 
+      status: 'error', 
+      error: error instanceof Error ? error.message : String(error)
+    };
   }
 };
 
@@ -145,61 +219,53 @@ export const setSimulationMode = (enabled: boolean) => {
   return errorTracking.isInSimulationMode;
 };
 
-// Create a more detailed mock analysis response
-const mockAnalysisResponse = (imageBase64: string, lookId?: string) => {
-  // Mock facial analysis result
-  const skinTones = ['Fair', 'Light', 'Medium', 'Olive', 'Tan', 'Deep'];
-  const faceShapes = ['Oval', 'Round', 'Heart', 'Square', 'Diamond', 'Rectangle'];
+// Fallback analysis function
+const getFallbackAnalysis = (imageBase64: string, lookId?: string) => {
+  console.warn('Using fallback analysis with enhanced structure');
+  
+  // Get makeup knowledge programmatically
+  const makeupKnowledge = getMakeupKnowledge();
+  
+  // Generate deterministic but realistic analysis
+  const skinTones = Object.keys(makeupKnowledge.skinTones);
+  const faceShapes = Object.keys(makeupKnowledge.faceShapes);
   const features = [
-    'High cheekbones', 'Defined jawline', 'Prominent brow', 'Wide-set eyes', 
+    'High cheekbones', 'Defined jawline', 'Prominent brow', 'Wide-set eyes',
     'Full lips', 'Narrow nose', 'Arched eyebrows', 'Long lashes', 'Defined cupid\'s bow',
     'Symmetrical features', 'Almond-shaped eyes'
   ];
   
+  // Generate a deterministic result based on the lookId
+  const hashValue = lookId ? hashString(lookId) : Date.now();
+  const skinTone = skinTones[hashValue % skinTones.length];
+  const faceShape = faceShapes[(hashValue + 2) % faceShapes.length];
+  
+  // Select features based on the hash
+  const featureCount = 2 + (hashValue % 3);
+  const selectedFeatures = [];
+  for (let i = 0; i < featureCount; i++) {
+    const featureIndex = (hashValue + i * 7) % features.length;
+    selectedFeatures.push(features[featureIndex]);
+  }
+  
+  // Get makeup knowledge for this skin tone and face shape
+  const skinToneInfo = makeupKnowledge.skinTones[skinTone.toLowerCase()] || makeupKnowledge.skinTones.medium;
+  const faceShapeInfo = makeupKnowledge.faceShapes[faceShape.toLowerCase()] || makeupKnowledge.faceShapes.oval;
+  
+  // Generate recommendations based on the knowledge
   const recommendations = [
-    'Use warm-toned foundation to complement your skin undertones',
-    'Apply bronzer along the temples and jawline to define your face shape',
-    'Define your brows with a slightly angled shape',
-    'Try a cream blush on the apples of your cheeks for a natural flush',
-    'Apply highlighter to your cheekbones to enhance your facial structure',
-    'Use a lip liner to define your natural lip shape',
-    'Apply eyeshadow in a gradient from light to dark for depth',
-    'Blend concealer in a triangle shape under your eyes to brighten',
-    'Set your T-zone with translucent powder to control shine',
-    'Curl your lashes before applying mascara for an eye-opening effect',
-    'Use a transition shade in your eye crease for a seamless blend'
+    ...skinToneInfo.makeupTips,
+    ...faceShapeInfo.makeupTips,
+    ...generateTechniqueTips(makeupKnowledge.techniques)
   ];
   
-  // Randomize based on lookId to ensure consistent responses for the same look
-  const seedValue = lookId ? hashString(lookId) : Date.now();
-  const rng = seedRandom(seedValue);
+  // Generate a look process
+  const lookType = lookId?.includes('glam') ? 'glamorous' :
+                 lookId?.includes('natural') ? 'natural' :
+                 lookId?.includes('korean') ? 'Korean' : 'classic';
   
-  // Randomly select values using seeded RNG
-  const skinTone = skinTones[Math.floor(rng() * skinTones.length)];
-  const faceShape = faceShapes[Math.floor(rng() * faceShapes.length)];
-  
-  const selectedFeatures = [];
-  const featureCount = 2 + Math.floor(rng() * 3);
-  const shuffledFeatures = [...features].sort(() => rng() - 0.5);
-  for (let i = 0; i < featureCount; i++) {
-    selectedFeatures.push(shuffledFeatures[i]);
-  }
-  
-  const selectedRecommendations = [];
-  const recCount = 3 + Math.floor(rng() * 2);
-  const shuffledRecs = [...recommendations].sort(() => rng() - 0.5);
-  for (let i = 0; i < recCount; i++) {
-    selectedRecommendations.push(shuffledRecs[i]);
-  }
-  
-  // Generate more detailed guidance
-  const lookType = lookId?.includes('glam') ? 'glamorous' : 
-                  lookId?.includes('natural') ? 'natural' : 
-                  lookId?.includes('korean') ? 'Korean' : 'classic';
-  
-  const steps = generateMockSteps(lookType, skinTone, faceShape);
-  const currentStepIndex = Math.floor(rng() * steps.length);
-  const currentStep = steps[currentStepIndex];
+  const steps = generateMakeupSteps(lookType, skinTone, faceShape, makeupKnowledge);
+  const currentStepIndex = Math.floor(hashValue % steps.length);
   const progress = Math.round((currentStepIndex / steps.length) * 100);
   
   return {
@@ -210,11 +276,13 @@ const mockAnalysisResponse = (imageBase64: string, lookId?: string) => {
         skinTone,
         faceShape,
         features: selectedFeatures,
-        recommendations: selectedRecommendations,
-        lookType
+        recommendations: recommendations.slice(0, 5),
+        lookType,
+        skinToneInfo,
+        faceShapeInfo
       },
       guidance: {
-        currentStep,
+        currentStep: steps[currentStepIndex],
         progress,
         steps,
         currentStepIndex
@@ -223,70 +291,90 @@ const mockAnalysisResponse = (imageBase64: string, lookId?: string) => {
   };
 };
 
-// Generate steps based on look type and facial features
-const generateMockSteps = (lookType: string, skinTone: string, faceShape: string) => {
-  // Base steps that are common to most looks
+// Helper functions
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0; // Convert to 32bit integer
+  }
+  return Math.abs(hash);
+}
+
+function generateTechniqueTips(techniques) {
+  const allTips = [];
+  for (const category in techniques) {
+    allTips.push(...techniques[category]);
+  }
+  
+  // Select random tips
+  const selectedTips = [];
+  for (let i = 0; i < 3; i++) {
+    if (allTips.length === 0) break;
+    const randomIndex = Math.floor(Math.random() * allTips.length);
+    selectedTips.push(allTips[randomIndex]);
+    allTips.splice(randomIndex, 1);
+  }
+  
+  return selectedTips;
+}
+
+function generateMakeupSteps(lookType: string, skinTone: string, faceShape: string, knowledge: any) {
   const baseSteps = [
-    "Start by applying primer to create a smooth base for your makeup",
-    "Apply foundation, focusing on even coverage across your face",
-    "Use concealer to cover any blemishes and brighten under your eyes",
-    "Set your foundation with a light dusting of powder",
-    "Define your brows to frame your face",
+    "Cleanse your face thoroughly to remove any oils or residue",
+    "Apply primer focusing on T-zone and areas with visible pores",
+    "Apply foundation evenly across your face using a beauty blender",
+    "Conceal any blemishes and under-eye circles",
+    "Set your foundation with translucent powder",
+    "Define your brows with light, feathery strokes",
     "Apply eyeshadow primer to your eyelids",
-    "Contour to enhance your face shape",
+    "Contour your cheekbones and jawline",
     "Apply blush to the apples of your cheeks",
-    "Add highlighter to the high points of your face",
+    "Highlight the high points of your face",
     "Apply mascara to your upper and lower lashes",
-    "Finish with a setting spray to lock in your look"
+    "Apply lipstick and blot for a natural finish",
+    "Set your makeup with setting spray"
   ];
   
-  // Customize steps based on look type
-  const customSteps: Record<string, string[]> = {
+  // Get customized steps based on look type
+  const customSteps = {
     'glamorous': [
-      "Create a dramatic eye look with smoky eyeshadow, focusing on depth in the crease",
-      "Apply winged eyeliner for definition and drama",
-      "Add false lashes for extra volume and length",
-      "Use a bold lipstick shade that complements your skin tone"
+      "Create a dramatic smoky eye, building intensity at the outer corner",
+      "Apply winged liner for definition and drama",
+      "Apply individual false lashes for volume and dimension",
+      "Use a bold lipstick shade that complements your skin tone",
+      "Apply highlighter more generously for a dramatic glow"
     ],
     'natural': [
       "Apply a neutral eyeshadow wash across the lid",
       "Tightline your upper lash line for subtle definition",
-      "Apply a natural-looking blush for a healthy flush",
-      "Finish with a tinted lip balm or sheer gloss"
+      "Apply a natural-looking cream blush for a healthy flush",
+      "Use a tinted lip balm for subtle color",
+      "Focus on skin looking natural and luminous rather than matte"
     ],
     'Korean': [
       "Focus on creating a dewy, glass-skin finish",
       "Apply a subtle wash of color on the eyelids",
       "Create straight, soft brows rather than arched ones",
-      "Apply a gradient lip with the color concentrated in the center"
+      "Apply a gradient lip with the color concentrated in the center",
+      "Keep the look fresh and youthful with minimal contouring"
     ],
     'classic': [
-      "Apply a neutral eyeshadow base with definition in the crease",
-      "Define your eyes with a subtle eyeliner",
+      "Apply a neutral eyeshadow with definition in the crease",
+      "Define your eyes with a subtle brown liner",
       "Apply a classic pink or coral blush",
-      "Finish with a satin lipstick in a flattering shade"
+      "Finish with a satin lipstick in a flattering shade",
+      "Ensure balance between eye and lip intensity"
     ]
   };
   
-  // Add face shape specific tips
-  const faceShapeTips: Record<string, string> = {
-    'Round': "Contour along the temples and jawline to add definition",
-    'Square': "Soften your angles by applying blush in a circular motion on the apples of your cheeks",
-    'Heart': "Balance your face by adding definition to your jawline with contour",
-    'Oval': "Maintain the natural balance of your face with even application of contour and highlight",
-    'Diamond': "Highlight your cheekbones and soften your jawline",
-    'Rectangle': "Add width to your face by focusing blush on the apples of your cheeks"
-  };
+  // Get face shape specific tips
+  const faceShapeInfo = knowledge.faceShapes[faceShape.toLowerCase()] || knowledge.faceShapes.oval;
+  const faceShapeTips = faceShapeInfo.makeupTips;
   
-  // Add skin tone specific tips
-  const skinToneTips: Record<string, string> = {
-    'Fair': "Choose cool-toned contour shades to create natural shadows",
-    'Light': "Opt for peachy blush tones to complement your skin",
-    'Medium': "Bronze tones will add warmth and dimension to your complexion",
-    'Olive': "Use golden-toned products to enhance your natural warmth",
-    'Tan': "Rich, warm colors will complement your skin beautifully",
-    'Deep': "Use vibrant colors that stand out against your rich skin tone"
-  };
+  // Get skin tone specific tips
+  const skinToneInfo = knowledge.skinTones[skinTone.toLowerCase()] || knowledge.skinTones.medium;
+  const skinToneTips = skinToneInfo.makeupTips;
   
   // Combine all steps
   let allSteps = [...baseSteps];
@@ -296,44 +384,172 @@ const generateMockSteps = (lookType: string, skinTone: string, faceShape: string
     allSteps = allSteps.concat(customSteps[lookType]);
   }
   
-  // Add face shape tip
-  if (faceShapeTips[faceShape]) {
-    allSteps.push(faceShapeTips[faceShape]);
-  }
+  // Add face shape and skin tone tips
+  allSteps = allSteps.concat(faceShapeTips);
+  allSteps = allSteps.concat(skinToneTips);
   
-  // Add skin tone tip
-  if (skinToneTips[skinTone]) {
-    allSteps.push(skinToneTips[skinTone]);
-  }
-  
-  // Shuffle and return
-  return shuffleArray(allSteps);
-};
+  // Make each step more instructional
+  return allSteps.map((step, index) => {
+    return `Step ${index + 1}: ${step}`;
+  });
+}
 
-// Helper function to create a seeded random number generator
-function seedRandom(seed: number) {
-  return function() {
-    seed = (seed * 9301 + 49297) % 233280;
-    return seed / 233280;
+// Get makeup knowledge for offline fallback
+function getMakeupKnowledge() {
+  return {
+    products: {
+      "primer": {
+        purpose: "Creates a smooth base for makeup application",
+        applicationAreas: ["entire face"],
+        applicationTechniques: ["fingers", "beauty blender", "brush"],
+        detectionHints: ["shiny appearance", "smoothed skin texture"]
+      },
+      "foundation": {
+        purpose: "Evens out skin tone and provides coverage",
+        applicationAreas: ["entire face"],
+        applicationTechniques: ["beauty blender", "brush", "fingers"],
+        detectionHints: ["even skin tone", "covered blemishes", "uniform color"]
+      },
+      "concealer": {
+        purpose: "Covers blemishes, dark circles and imperfections",
+        applicationAreas: ["under eyes", "blemishes", "redness areas"],
+        applicationTechniques: ["concealer brush", "beauty blender", "fingers"],
+        detectionHints: ["brightened under-eye area", "hidden blemishes"]
+      },
+      "contour": {
+        purpose: "Creates shadows to define facial structure",
+        applicationAreas: ["cheekbones", "jawline", "sides of nose", "forehead"],
+        applicationTechniques: ["angled brush", "contour stick", "beauty blender"],
+        detectionHints: ["darkened areas below cheekbones", "defined jawline"]
+      },
+      "blush": {
+        purpose: "Adds color to the cheeks",
+        applicationAreas: ["apples of cheeks", "cheekbones"],
+        applicationTechniques: ["fluffy brush", "cream blush", "fingers"],
+        detectionHints: ["pink/peach color on cheeks", "flushed appearance"]
+      },
+      "highlighter": {
+        purpose: "Adds glow to high points of the face",
+        applicationAreas: ["cheekbones", "brow bone", "cupid's bow", "nose bridge"],
+        applicationTechniques: ["fan brush", "highlighting stick", "fingers"],
+        detectionHints: ["shimmery/glowy areas", "light reflection points"]
+      },
+      "eyeshadow": {
+        purpose: "Adds color to the eyelids",
+        applicationAreas: ["eyelids", "crease", "outer corner"],
+        applicationTechniques: ["eyeshadow brushes", "fingers", "sponge applicator"],
+        detectionHints: ["colored/shimmery eyelids", "defined crease"]
+      },
+      "eyeliner": {
+        purpose: "Defines the eyes and lash line",
+        applicationAreas: ["upper lash line", "lower lash line", "waterline"],
+        applicationTechniques: ["eyeliner brush", "pencil", "gel pot", "liquid pen"],
+        detectionHints: ["defined line along lashes", "winged tips", "darkened lash line"]
+      },
+      "mascara": {
+        purpose: "Darkens, lengthens and thickens lashes",
+        applicationAreas: ["upper lashes", "lower lashes"],
+        applicationTechniques: ["mascara wand"],
+        detectionHints: ["darkened eyelashes", "more visible/longer lashes"]
+      },
+      "lipstick": {
+        purpose: "Adds color to the lips",
+        applicationAreas: ["lips", "lip line"],
+        applicationTechniques: ["lipstick bullet", "lip brush", "liquid applicator"],
+        detectionHints: ["colored lips", "defined lip shape"]
+      },
+      "setting spray": {
+        purpose: "Sets makeup and extends wear time",
+        applicationAreas: ["entire face"],
+        applicationTechniques: ["spray bottle"],
+        detectionHints: ["slightly dewy finish", "makeup appears set"]
+      }
+    },
+    faceShapes: {
+      "oval": {
+        characteristics: ["face length is about 1.5x width", "slightly wider forehead", "jawline slightly narrower than forehead"],
+        makeupTips: ["Most makeup looks work well", "Light contouring to maintain natural balance", "Can experiment with many styles"]
+      },
+      "round": {
+        characteristics: ["face length and width are similar", "rounded jawline and chin", "fuller cheeks"],
+        makeupTips: ["Contour sides of face to create definition", "Highlight center of face", "Angular eye makeup to create sharpness"]
+      },
+      "square": {
+        characteristics: ["strong jawline", "forehead and jawline nearly same width", "minimal curve at jaw"],
+        makeupTips: ["Soften angles with blush on apples of cheeks", "Contour jawline corners to soften", "Round eye makeup styles work well"]
+      },
+      "heart": {
+        characteristics: ["wider forehead", "narrower jawline and chin", "high cheekbones"],
+        makeupTips: ["Contour temples slightly", "Use blush to balance wider forehead", "Emphasize eyes and lips to draw attention center-face"]
+      },
+      "diamond": {
+        characteristics: ["narrow forehead and jawline", "wide cheekbones", "angular features"],
+        makeupTips: ["Highlight forehead and chin to balance", "Blush applied horizontally rather than angled", "Softer contour under cheekbones"]
+      },
+      "rectangular": {
+        characteristics: ["face length more than 1.5x width", "forehead, cheeks, and jawline similar width", "long straight cheeks"],
+        makeupTips: ["Contour temples and jawline to shorten", "Apply blush horizontally across cheeks", "Focus on creating width with makeup"]
+      }
+    },
+    skinTones: {
+      "fair": {
+        characteristics: ["Burns easily", "Ivory or pale undertone", "Visible veins appear blue/purple"],
+        makeupTips: ["Cool-toned contours (taupe)", "Soft pink or peach blushes", "Champagne or pearl highlighters"]
+      },
+      "light": {
+        characteristics: ["Burns easily but can tan", "Neutral to warm undertones", "Visible veins appear blue/green"],
+        makeupTips: ["Neutral-toned contours", "Rose or soft coral blushes", "Champagne or gold highlighters"]
+      },
+      "medium": {
+        characteristics: ["Tans easily", "Golden or olive undertones", "Visible veins appear green"],
+        makeupTips: ["Warm-toned contours", "Coral or warm pink blushes", "Gold or peach highlighters"]
+      },
+      "tan": {
+        characteristics: ["Rarely burns, tans well", "Golden, caramel undertones", "Visible veins appear green"],
+        makeupTips: ["Warm brown contours", "Warm terracotta or deep coral blushes", "Gold or bronze highlighters"]
+      },
+      "deep": {
+        characteristics: ["Never burns", "Rich undertones", "Deep complexion"],
+        makeupTips: ["Rich chocolate contours", "Deep berry or bright coral blushes", "Gold, copper or bronze highlighters"]
+      }
+    },
+    techniques: {
+      "foundation": [
+        "Start from center of face and blend outward",
+        "Use downward strokes to avoid highlighting facial hair",
+        "Apply with beauty blender using bouncing motion for seamless finish",
+        "Use less product around hairline and jawline to avoid harsh lines"
+      ],
+      "contouring": [
+        "Place contour in hollow beneath cheekbone",
+        "Blend upward toward temples for lifted effect",
+        "Use light hand and build gradually",
+        "Ensure strong blending for natural-looking shadows"
+      ],
+      "blush": [
+        "Smile to locate apples of cheeks",
+        "For round faces, apply at an angle toward temples",
+        "For long faces, apply horizontally across cheekbones",
+        "Blend edges thoroughly for natural flush"
+      ],
+      "eyeshadow": [
+        "Apply lightest shade all over lid as base",
+        "Define crease with medium tone using windshield wiper motions",
+        "Deepen outer corner with darkest shade in V-shape",
+        "Blend thoroughly between colors for seamless gradient"
+      ],
+      "eyeliner": [
+        "Start thin at inner corner and thicken toward outer corner",
+        "For winged liner, follow angle from lower lash line up toward end of eyebrow",
+        "Use small, connected strokes rather than one continuous line",
+        "Set liquid liner with matching eyeshadow for longevity"
+      ],
+      "lipstick": [
+        "Define cupid's bow first with pointed applicator",
+        "Line outer edges of lips for definition",
+        "Fill in center and press lips together to distribute",
+        "Blot with tissue and apply second coat for longevity"
+      ]
+    }
   };
-}
-
-// Helper function to shuffle array using seeded RNG
-function shuffleArray<T>(array: T[]): T[] {
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
-}
-
-// Helper to hash a string to a number (for seeding)
-function hashString(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) - hash) + str.charCodeAt(i);
-    hash |= 0; // Convert to 32bit integer
-  }
-  return Math.abs(hash);
 }

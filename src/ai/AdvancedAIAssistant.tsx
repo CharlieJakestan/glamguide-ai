@@ -1,721 +1,636 @@
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { MessageSquare, Mic, MicOff, Volume2, Brain, Zap, MoreHorizontal, Sparkles, Wand2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Volume2, VolumeX, Mic, MicOff, BrainCircuit, MessageSquareMore, RefreshCw } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { speakInstruction } from '@/services/speechService';
-import { generateAdvancedResponse } from '@/services/enhancedAIService';
+import { Progress } from '@/components/ui/progress';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { getCosmetologyKnowledge } from '@/services/ganService';
 
 interface AdvancedAIAssistantProps {
-  facialTraits?: {
-    skinTone?: string;
-    faceShape?: string;
-    features?: string[];
-    skinType?: string;
-  };
+  facialTraits?: any;
   currentStep?: string;
-  faceDetected: boolean;
-  detectedTools?: Array<{ type: string; confidence: number }>;
-  movementData?: { x: number; y: number; magnitude: number };
-  facialAttributes?: {
-    age?: number;
-    gender?: string;
-    expression?: string;
-    skinType?: string;
-  };
-  detectedActions?: Array<{ action: string; confidence: number; timestamp: number }>;
-  makeupRegions?: any;
+  faceDetected?: boolean;
+  detectedTools?: Array<{type: string; confidence: number}>;
+  movementData?: any;
+  facialAttributes?: any;
+  detectedActions?: Array<{action: string; confidence: number; timestamp: number}>;
+  makeupRegions?: Array<{
+    type: string;
+    region: {
+      points: Array<{x: number, y: number}>;
+      center: {x: number, y: number};
+    };
+  }>;
   onExecuteCommand?: (command: string, params: Record<string, string>) => void;
   onApplyVirtualMakeup?: (makeup: any) => void;
 }
 
 const AdvancedAIAssistant: React.FC<AdvancedAIAssistantProps> = ({
   facialTraits,
-  currentStep = '',
+  currentStep,
   faceDetected,
   detectedTools = [],
-  movementData = { x: 0, y: 0, magnitude: 0 },
-  facialAttributes = {},
+  movementData,
+  facialAttributes,
   detectedActions = [],
-  makeupRegions,
+  makeupRegions = [],
   onExecuteCommand,
   onApplyVirtualMakeup
 }) => {
-  const [userInput, setUserInput] = useState('');
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [conversation, setConversation] = useState<Array<{ role: 'user' | 'ai'; content: string; timestamp: number }>>([
-    { role: 'ai', content: 'Hello! I\'m your advanced makeup AI assistant. I can recognize your facial features and help you create the perfect look. How would you like me to assist you today?', timestamp: Date.now() }
+  const [messages, setMessages] = useState<Array<{role: string; content: string; timestamp: number}>>([
+    {role: 'assistant', content: 'Hello! I\'m your AI makeup assistant. I\'ll help guide you through your makeup application.', timestamp: Date.now()}
   ]);
-  const [isThinking, setIsThinking] = useState(false);
-  const [assistantMode, setAssistantMode] = useState<'jarvis' | 'friday' | 'expert'>('friday');
-  const [voiceType, setVoiceType] = useState<'female' | 'male' | 'neutral'>('female');
-  
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const [thinking, setThinking] = useState(false);
+  const [knowledge, setKnowledge] = useState<any>(null);
+  const [loadingKnowledge, setLoadingKnowledge] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const lastUserActivityRef = useRef<number>(Date.now());
-  const awaitingResponseRef = useRef<boolean>(false);
   
-  // AI personality traits
-  const personalityTraits = {
-    jarvis: {
-      greeting: "At your service. How may I assist with your makeup today?",
-      style: "formal, precise, and slightly witty",
-      prompt: "You are J.A.R.V.I.S., an advanced AI makeup assistant. Respond in a formal, precise, and slightly witty manner. You prioritize efficiency and results. Use technical terminology when appropriate and offer detailed explanations. Speak like an AI butler with sophistication."
-    },
-    friday: {
-      greeting: "Hey there! Ready to create some amazing makeup looks together?",
-      style: "friendly, supportive, and enthusiastic",
-      prompt: "You are F.R.I.D.A.Y., an advanced AI makeup assistant. Be friendly, supportive, and enthusiastic. Use casual language, emoji occasionally, and be encouraging. Your personality is warm and approachable, like a helpful friend who's excited about makeup."
-    },
-    expert: {
-      greeting: "Welcome to your professional makeup consultation. Let's assess your features and create the perfect look.",
-      style: "professional, authoritative, and detailed",
-      prompt: "You are a professional makeup artist with decades of experience. Speak with authority and expertise. Use industry terminology, mention professional techniques, and explain the reasoning behind your recommendations. Your tone is sophisticated and educational."
-    }
-  };
-  
-  // Initialize speech recognition
+  // Fetch cosmetology knowledge
   useEffect(() => {
-    if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
-      const SpeechRecognitionConstructor = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (SpeechRecognitionConstructor) {
-        recognitionRef.current = new SpeechRecognitionConstructor();
-        recognitionRef.current.continuous = true;
-        recognitionRef.current.interimResults = true;
-        
-        recognitionRef.current.onresult = (event) => {
-          const transcript = Array.from(event.results)
-            .map(result => result[0])
-            .map(result => result.transcript)
-            .join('');
-          
-          setUserInput(transcript);
-          lastUserActivityRef.current = Date.now();
-        };
-        
-        recognitionRef.current.onerror = (event) => {
-          console.error('Speech recognition error', event);
-          setIsListening(false);
-        };
-      }
-      
-      return () => {
-        if (recognitionRef.current) {
-          recognitionRef.current.stop();
+    const fetchKnowledge = async () => {
+      setLoadingKnowledge(true);
+      try {
+        const result = await getCosmetologyKnowledge();
+        if (result && result.status === 'ok' && result.knowledge) {
+          setKnowledge(result.knowledge);
         }
-      };
-    } else {
-      console.warn('Speech recognition not supported in this browser');
-    }
+      } catch (error) {
+        console.error('Error fetching cosmetology knowledge:', error);
+      } finally {
+        setLoadingKnowledge(false);
+      }
+    };
+    
+    fetchKnowledge();
   }, []);
   
-  // Auto-scroll to latest message
+  // Scroll to bottom of messages
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [conversation]);
+  }, [messages]);
   
-  // Monitor for inactivity and proactively engage
+  // Process changes in detected actions
   useEffect(() => {
-    if (!faceDetected) return;
+    if (detectedActions.length === 0) return;
     
-    const INACTIVITY_TIMEOUT = 30000; // 30 seconds
-    
-    const checkActivity = () => {
-      const now = Date.now();
-      const elapsed = now - lastUserActivityRef.current;
-      
-      if (elapsed > INACTIVITY_TIMEOUT && !isThinking && !awaitingResponseRef.current && conversation.length > 1) {
-        // User has been inactive, send a proactive message
-        const proactiveMessages = [
-          "I notice you're thinking... Need any suggestions for your makeup look?",
-          "Would you like me to recommend a technique for your face shape?",
-          "I'm detecting your facial features. Would you like me to suggest a matching look?",
-          "Need any help with your current step? I can guide you through it."
-        ];
-        
-        const randomMessage = proactiveMessages[Math.floor(Math.random() * proactiveMessages.length)];
-        
-        setConversation(prev => [
-          ...prev, 
-          { role: 'ai', content: randomMessage, timestamp: Date.now() }
-        ]);
-        
-        if (voiceType !== 'neutral') {
-          setIsSpeaking(true);
-          speakInstruction(randomMessage).then(() => setIsSpeaking(false));
-        }
-        
-        lastUserActivityRef.current = now;
-      }
-    };
-    
-    const intervalId = setInterval(checkActivity, 10000);
-    
-    return () => clearInterval(intervalId);
-  }, [faceDetected, isThinking, conversation, voiceType]);
-  
-  // Respond to detected actions
-  useEffect(() => {
-    if (detectedActions.length === 0 || isThinking || awaitingResponseRef.current) return;
-    
-    // Get the most recent action
+    // Get the most recent action that hasn't been processed yet
     const latestAction = detectedActions[0];
     
-    // If it's a new action (within the last 2 seconds)
-    if (Date.now() - latestAction.timestamp < 2000 && latestAction.confidence > 0.8) {
-      const actionResponses: Record<string, string[]> = {
-        'Head turning left': [
-          "I notice you're looking to the left. Would you like me to suggest makeup for that side?",
-          "Looking at your left profile? Let me analyze that angle for you.",
-        ],
-        'Head turning right': [
-          "I see you're checking your right profile. Need help with that angle?",
-          "Your right side is looking good! Need any tips for that area?",
-        ],
-        'Head moving up': [
-          "Looking up? Your under-eye area looks good.",
-          "I see you're checking your brow bone area. Need any eyeshadow tips?",
-        ],
-        'Head moving down': [
-          "Looking down? That's perfect for applying eyeshadow.",
-          "When you look down like that, it's easier to apply eyeliner.",
-        ]
-      };
+    // Skip if it's older than 3 seconds
+    if (Date.now() - latestAction.timestamp > 3000) return;
+    
+    // Process the action
+    processUserAction(latestAction.action, latestAction.confidence);
+  }, [detectedActions]);
+  
+  // Process step changes
+  useEffect(() => {
+    if (!currentStep) return;
+    
+    // Check if this is a new step we haven't announced yet
+    const previousMessage = messages[messages.length - 1];
+    if (previousMessage?.content?.includes(currentStep)) return;
+    
+    // Add the new step instruction
+    addAssistantMessage(`Let's move to the next step: ${currentStep}`);
+  }, [currentStep]);
+  
+  // Process detected tools
+  useEffect(() => {
+    if (detectedTools.length === 0) return;
+    
+    // Get the most recently detected tool
+    const latestTool = detectedTools[0];
+    
+    // Skip if confidence is too low
+    if (latestTool.confidence < 0.7) return;
+    
+    // Check if we've already mentioned this tool recently
+    const recentMessages = messages.slice(-5);
+    const alreadyMentioned = recentMessages.some(msg => 
+      msg.content.toLowerCase().includes(latestTool.type.toLowerCase())
+    );
+    
+    if (alreadyMentioned) return;
+    
+    // Add a message about the detected tool
+    addAssistantMessage(`I see you're using a ${latestTool.type}. Great choice!`);
+    
+    // If we have knowledge about this tool, provide tips
+    if (knowledge) {
+      const toolType = latestTool.type.toLowerCase();
       
-      // Find responses for this action type
-      const actionType = Object.keys(actionResponses).find(type => 
-        latestAction.action.includes(type)
-      );
-      
-      if (actionType && Math.random() < 0.3) { // Only respond 30% of the time to avoid being annoying
-        const responses = actionResponses[actionType];
-        const response = responses[Math.floor(Math.random() * responses.length)];
+      // Check if it's a brush or specific product
+      if (toolType.includes('brush')) {
+        const brushType = Object.keys(knowledge.products).find(product => 
+          toolType.includes(product.toLowerCase())
+        );
         
-        setConversation(prev => [
-          ...prev, 
-          { role: 'ai', content: response, timestamp: Date.now() }
-        ]);
+        if (brushType && knowledge.products[brushType]) {
+          const productInfo = knowledge.products[brushType];
+          const techniques = knowledge.techniques[brushType] || [];
+          
+          if (techniques.length > 0) {
+            // Choose a random technique tip
+            const randomTip = techniques[Math.floor(Math.random() * techniques.length)];
+            addAssistantMessage(`Tip for ${brushType} application: ${randomTip}`);
+          }
+        }
+      } else {
+        // It's a product, not a brush
+        const productType = Object.keys(knowledge.products).find(product => 
+          toolType.includes(product.toLowerCase())
+        );
         
-        if (voiceType !== 'neutral') {
-          setIsSpeaking(true);
-          speakInstruction(response).then(() => setIsSpeaking(false));
+        if (productType && knowledge.products[productType]) {
+          const productInfo = knowledge.products[productType];
+          addAssistantMessage(`For best ${productType} application: ${productInfo.purpose}`);
         }
       }
     }
-  }, [detectedActions, isThinking, voiceType]);
+  }, [detectedTools, knowledge]);
   
-  // Toggle listening
-  const toggleListening = () => {
-    if (!recognitionRef.current) return;
+  // Add assistant message
+  const addAssistantMessage = (content: string) => {
+    setMessages(prev => [...prev, {
+      role: 'assistant',
+      content,
+      timestamp: Date.now()
+    }]);
     
-    if (isListening) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    } else {
-      recognitionRef.current.start();
-      setIsListening(true);
-      
-      // Update last activity timestamp
-      lastUserActivityRef.current = Date.now();
+    // Speak the message if voice is enabled
+    if (voiceEnabled) {
+      speakText(content);
     }
   };
   
-  // Generate personalized AI prompt based on current state
-  const generateAIPrompt = useCallback(() => {
-    const personality = personalityTraits[assistantMode];
+  // Add user message
+  const addUserMessage = (content: string) => {
+    setMessages(prev => [...prev, {
+      role: 'user',
+      content,
+      timestamp: Date.now()
+    }]);
     
-    let prompt = personality.prompt + "\n\n";
-    
-    // Add contextual information
-    prompt += "Current context:\n";
-    
-    if (facialTraits) {
-      prompt += `- User has ${facialTraits.skinTone || 'unknown'} skin tone and ${facialTraits.faceShape || 'unknown'} face shape.\n`;
-      if (facialTraits.features && facialTraits.features.length > 0) {
-        prompt += `- Notable facial features: ${facialTraits.features.join(', ')}.\n`;
-      }
-    }
-    
-    if (facialAttributes) {
-      if (facialAttributes.expression) {
-        prompt += `- User's current expression: ${facialAttributes.expression}.\n`;
-      }
-      if (facialAttributes.skinType) {
-        prompt += `- User's skin type: ${facialAttributes.skinType}.\n`;
-      }
-    }
-    
-    if (currentStep) {
-      prompt += `- Current makeup step: ${currentStep}.\n`;
-    }
-    
-    if (detectedTools.length > 0) {
-      prompt += `- Tools detected in user's hand: ${detectedTools.map(t => t.type).join(', ')}.\n`;
-    }
-    
-    // Add makeup expertise
-    prompt += "\nYou are an expert in makeup application, with deep knowledge of:";
-    prompt += "\n- Color theory and matching makeup to skin tones";
-    prompt += "\n- Techniques for different face shapes";
-    prompt += "\n- Product recommendations and application methods";
-    prompt += "\n- Step-by-step guidance for complete looks";
-    
-    // Add instructions for responses
-    prompt += "\n\nWhen responding:";
-    prompt += "\n1. Be conversational and natural, like a makeup artist friend";
-    prompt += "\n2. If you detect a question about makeup, provide detailed advice";
-    prompt += "\n3. If the user seems confused, offer simple step-by-step guidance";
-    prompt += "\n4. Be supportive and encouraging throughout the makeup process";
-    prompt += "\n5. Keep responses concise but informative";
-    
-    return prompt;
-  }, [assistantMode, facialTraits, facialAttributes, currentStep, detectedTools]);
+    // Process user message
+    processUserMessage(content);
+  };
   
-  // Send message
-  const sendMessage = async () => {
-    if (!userInput.trim()) return;
+  // Process user action
+  const processUserAction = (action: string, confidence: number) => {
+    // Skip low confidence actions
+    if (confidence < 0.7) return;
     
-    // Add user message to conversation
-    const userMessage = userInput.trim();
-    setConversation(prev => [...prev, { role: 'user', content: userMessage, timestamp: Date.now() }]);
-    setUserInput('');
-    setIsThinking(true);
-    awaitingResponseRef.current = true;
+    // Check if this is a significant action that should get a response
+    if (
+      action.includes('smil') ||
+      action.includes('head') ||
+      action.includes('expressing')
+    ) {
+      // React to the action
+      switch (true) {
+        case action.includes('smil'):
+          addAssistantMessage("I see you're smiling! Your makeup looks great!");
+          break;
+        case action.includes('head turned'):
+          addAssistantMessage("I notice you're turning your head to check the angles. Good thinking!");
+          break;
+        case action.includes('expressing happy'):
+          addAssistantMessage("You seem happy with your progress. That's great!");
+          break;
+        case action.includes('expressing surprised'):
+          addAssistantMessage("Did something surprise you? Let me know if you need any help.");
+          break;
+        default:
+          // Don't react to every action to avoid being too chatty
+          break;
+      }
+    }
+  };
+  
+  // Process user message
+  const processUserMessage = (message: string) => {
+    const lowerMessage = message.toLowerCase();
     
-    // Extract detected tool types
-    const toolTypes = detectedTools.map(tool => tool.type);
+    // Show thinking state
+    setThinking(true);
     
-    try {
-      // Generate AI response with advanced context
-      const aiPrompt = generateAIPrompt();
-      
-      const response = await generateAdvancedResponse(
-        userMessage,
-        aiPrompt,
-        {
-          facialTraits,
-          tools: toolTypes,
-          currentStep,
-          faceDetected,
-          facialAttributes,
-          recentActions: detectedActions.slice(0, 3).map(a => a.action)
+    // Simulate AI processing delay
+    setTimeout(() => {
+      // Handle commands
+      if (lowerMessage.includes('next step') || lowerMessage.includes('next instruction')) {
+        onExecuteCommand?.('next', {});
+        addAssistantMessage("Moving to the next step!");
+      } else if (lowerMessage.includes('previous step') || lowerMessage.includes('go back')) {
+        onExecuteCommand?.('previous', {});
+        addAssistantMessage("Going back to the previous step.");
+      } else if (lowerMessage.includes('analyze') || lowerMessage.includes('detection')) {
+        onExecuteCommand?.('analyze', {});
+        addAssistantMessage("I'll analyze your face again now.");
+      } else if (lowerMessage.includes('natural look') || lowerMessage.includes('natural makeup')) {
+        onExecuteCommand?.('selectLook', { lookName: 'natural' });
+        addAssistantMessage("I've selected a natural makeup look for you.");
+        
+        // Apply natural makeup settings
+        onApplyVirtualMakeup?.({
+          lips: { color: 'rgba(220, 150, 150, 0.5)', intensity: 0.5, glossy: true },
+          eyes: { color: 'rgba(180, 160, 140, 0.4)', intensity: 0.4 },
+          cheeks: { color: 'rgba(230, 180, 160, 0.4)', intensity: 0.3 },
+          foundation: { color: 'rgba(245, 222, 190, 0.2)', coverage: 0.2 }
+        });
+      } else if (lowerMessage.includes('glam') || lowerMessage.includes('dramatic')) {
+        onExecuteCommand?.('selectLook', { lookName: 'glam' });
+        addAssistantMessage("I've selected a glamorous makeup look for you.");
+        
+        // Apply glam makeup settings
+        onApplyVirtualMakeup?.({
+          lips: { color: 'rgba(220, 50, 90, 0.8)', intensity: 0.8, glossy: false },
+          eyes: { color: 'rgba(60, 60, 80, 0.7)', intensity: 0.7 },
+          cheeks: { color: 'rgba(250, 120, 120, 0.6)', intensity: 0.6 },
+          foundation: { color: 'rgba(245, 222, 179, 0.4)', coverage: 0.4 }
+        });
+      } else if (lowerMessage.includes('help') || lowerMessage.includes('what can you do')) {
+        addAssistantMessage(
+          "I can help you with your makeup application! You can ask me to:\n\n" +
+          "- Move to the next or previous step\n" +
+          "- Switch to a different makeup look (natural, glam, etc.)\n" +
+          "- Provide tips for specific products\n" +
+          "- Analyze your face\n" +
+          "- Get recommendations based on your skin tone and face shape"
+        );
+      } else if (lowerMessage.includes('face shape') && facialAttributes?.faceShape) {
+        // Provide face shape tips
+        if (knowledge?.faceShapes && facialAttributes.faceShape) {
+          const shape = facialAttributes.faceShape.toLowerCase();
+          const shapeInfo = knowledge.faceShapes[shape];
+          
+          if (shapeInfo) {
+            addAssistantMessage(
+              `Your face shape is ${facialAttributes.faceShape}. Here are some tips:\n\n` +
+              shapeInfo.makeupTips.join('\n\n')
+            );
+          } else {
+            addAssistantMessage(`Your face shape is ${facialAttributes.faceShape}, which works well with most makeup styles!`);
+          }
+        } else {
+          addAssistantMessage(`Your face shape is ${facialAttributes.faceShape}. This shape works well with most makeup styles!`);
         }
-      );
+      } else if (lowerMessage.includes('skin tone') && facialAttributes?.skinTone) {
+        // Provide skin tone tips
+        if (knowledge?.skinTones && facialAttributes.skinTone) {
+          const tone = facialAttributes.skinTone.toLowerCase();
+          const toneInfo = knowledge.skinTones[tone];
+          
+          if (toneInfo) {
+            addAssistantMessage(
+              `Your skin tone is ${facialAttributes.skinTone}. Here are some tips:\n\n` +
+              toneInfo.makeupTips.join('\n\n')
+            );
+          } else {
+            addAssistantMessage(`Your skin tone is ${facialAttributes.skinTone}. It's beautiful!`);
+          }
+        } else {
+          addAssistantMessage(`Your skin tone is ${facialAttributes.skinTone}. It's beautiful!`);
+        }
+      } else {
+        // Generic response for other queries
+        addAssistantMessage(getGenericResponse(message));
+      }
       
-      // Add AI response to conversation
-      setConversation(prev => [...prev, { role: 'ai', content: response, timestamp: Date.now() }]);
-      
-      // Check for commands to execute
-      const commandPatterns = [
-        { regex: /next( step)?/i, command: 'next' },
-        { regex: /previous( step)?/i, command: 'previous' },
-        { regex: /analyze( face)?/i, command: 'analyze' },
-        { regex: /look( for)? (\w+)/i, command: 'selectLook', paramName: 'lookName' },
-        { regex: /apply ([\w\s]+) (lip|eye|cheek|blush|foundation)/i, command: 'applyMakeup', paramGroup: 1, typeGroup: 2 }
+      setThinking(false);
+    }, 1000);
+  };
+  
+  // Get generic response
+  const getGenericResponse = (message: string) => {
+    const lowerMessage = message.toLowerCase();
+    const responses = [
+      "I'm here to help with your makeup application! What would you like to know?",
+      "That's a great question! Let me think about that...",
+      "I'm focusing on helping you with makeup right now. Is there something specific about your makeup look you'd like help with?",
+      "I understand what you're asking. Let me try to help you with that."
+    ];
+    
+    // Check for product-specific questions
+    if (knowledge?.products) {
+      for (const [product, info] of Object.entries(knowledge.products)) {
+        if (lowerMessage.includes(product.toLowerCase())) {
+          return `About ${product}: ${info.purpose}. It's best applied with ${info.applicationTechniques.join(' or ')}.`;
+        }
+      }
+    }
+    
+    // Check for technique questions
+    if (lowerMessage.includes('how to') || lowerMessage.includes('technique')) {
+      const techniques = [
+        "Start by applying products from the center of your face outward for the most natural look.",
+        "For precise application, use a small brush and build up gradually.",
+        "Always blend thoroughly to avoid harsh lines.",
+        "Use gentle patting motions rather than wiping for better product application."
       ];
       
-      for (const pattern of commandPatterns) {
-        const match = userMessage.match(pattern.regex);
-        if (match) {
-          const params: Record<string, string> = {};
-          
-          if (pattern.paramName && match[2]) {
-            params[pattern.paramName] = match[2];
-          }
-          
-          if (pattern.paramGroup && pattern.typeGroup && match[pattern.paramGroup] && match[pattern.typeGroup]) {
-            const color = match[pattern.paramGroup].trim();
-            const type = match[pattern.typeGroup].trim();
-            
-            // Handle makeup application
-            if (pattern.command === 'applyMakeup' && onApplyVirtualMakeup) {
-              const makeupToApply: any = {};
-              
-              if (type.includes('lip')) {
-                makeupToApply.lips = { color: color, intensity: 0.7, glossy: color.includes('gloss') };
-              } else if (type.includes('eye')) {
-                makeupToApply.eyes = { color: color, intensity: 0.6 };
-              } else if (type.includes('cheek') || type.includes('blush')) {
-                makeupToApply.cheeks = { color: color, intensity: 0.5 };
-              } else if (type.includes('foundation')) {
-                makeupToApply.foundation = { color: color, coverage: 0.6 };
-              }
-              
-              onApplyVirtualMakeup(makeupToApply);
-            }
-          }
-          
-          if (onExecuteCommand) {
-            onExecuteCommand(pattern.command, params);
-          }
-          break;
-        }
-      }
+      return techniques[Math.floor(Math.random() * techniques.length)];
+    }
+    
+    return responses[Math.floor(Math.random() * responses.length)];
+  };
+  
+  // Text-to-speech function
+  const speakText = (text: string) => {
+    if (!('speechSynthesis' in window)) return;
+    
+    // Create utterance
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.volume = 0.8;
+    
+    // Use a female voice if available
+    const voices = window.speechSynthesis.getVoices();
+    const femaleVoice = voices.find(voice => voice.name.includes('Female') || voice.name.includes('Google'));
+    if (femaleVoice) {
+      utterance.voice = femaleVoice;
+    }
+    
+    // Speak
+    window.speechSynthesis.speak(utterance);
+  };
+  
+  // Toggle voice
+  const toggleVoice = () => {
+    setVoiceEnabled(!voiceEnabled);
+    
+    if (!voiceEnabled) {
+      speakText("Voice guidance activated. I'll help you through your makeup routine.");
+    }
+  };
+  
+  // Handle voice command
+  const handleVoiceCommand = () => {
+    // In a real implementation, this would use the Web Speech API
+    // For now, we'll simulate it
+    setIsListening(true);
+    
+    // Simulate listening for 3 seconds
+    setTimeout(() => {
+      setIsListening(false);
       
-      // Speak the response if voice is enabled
-      if (voiceType !== 'neutral') {
-        setIsSpeaking(true);
-        await speakInstruction(response);
-        setIsSpeaking(false);
-      }
+      // Simulate a random voice command
+      const commands = [
+        "Next step please",
+        "Give me tips for this foundation",
+        "How does my blush look?",
+        "Show me a natural look"
+      ];
       
-      // Update last activity timestamp
-      lastUserActivityRef.current = Date.now();
-    } catch (error) {
-      console.error('Error generating response', error);
-      setConversation(prev => [...prev, { 
-        role: 'ai', 
-        content: 'I apologize, but I encountered an issue while processing your request. Could you try again?', 
-        timestamp: Date.now() 
-      }]);
-    } finally {
-      setIsThinking(false);
-      awaitingResponseRef.current = false;
-    }
-  };
-  
-  // Handle key press for sending message
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  };
-  
-  // Change AI assistant mode
-  const changeAssistantMode = (mode: 'jarvis' | 'friday' | 'expert') => {
-    setAssistantMode(mode);
-    const greeting = personalityTraits[mode].greeting;
-    
-    setConversation(prev => [
-      ...prev, 
-      { role: 'ai', content: `Switching to ${mode.toUpperCase()} mode. ${greeting}`, timestamp: Date.now() }
-    ]);
-    
-    setVoiceType(mode === 'jarvis' ? 'male' : mode === 'friday' ? 'female' : 'neutral');
-    
-    if (voiceType !== 'neutral') {
-      setIsSpeaking(true);
-      speakInstruction(`Switching to ${mode} mode. ${greeting}`).then(() => setIsSpeaking(false));
-    }
-  };
-  
-  // Return the formatted time for messages
-  const getFormattedTime = (timestamp: number) => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const randomCommand = commands[Math.floor(Math.random() * commands.length)];
+      addUserMessage(randomCommand);
+    }, 3000);
   };
   
   return (
-    <Card className="flex flex-col h-full bg-gradient-to-br from-purple-50 to-indigo-50 border-purple-100 shadow-md">
-      <div className="p-3 bg-gradient-to-r from-violet-200 to-indigo-200 flex justify-between items-center rounded-t-lg">
+    <Card className="h-full flex flex-col">
+      <div className="p-4 border-b flex items-center justify-between bg-gradient-to-r from-purple-100 to-pink-100">
         <div className="flex items-center">
-          {assistantMode === 'jarvis' ? (
-            <Zap className="h-5 w-5 text-blue-700 mr-2" />
-          ) : assistantMode === 'friday' ? (
-            <Sparkles className="h-5 w-5 text-pink-600 mr-2" />
-          ) : (
-            <Wand2 className="h-5 w-5 text-purple-700 mr-2" />
-          )}
-          <h3 className="font-medium text-gray-800">
-            {assistantMode === 'jarvis' ? 'J.A.R.V.I.S.' : assistantMode === 'friday' ? 'F.R.I.D.A.Y.' : 'Makeup Expert'} AI
-          </h3>
+          <BrainCircuit className="h-5 w-5 text-purple-600 mr-2" />
+          <h3 className="font-medium text-purple-800">AI Makeup Assistant</h3>
         </div>
         
         <div className="flex items-center space-x-2">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button 
-                      size="sm" 
-                      variant="ghost" 
-                      className="p-1 h-auto"
-                    >
-                      <Brain className="h-4 w-4 text-indigo-600" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-80">
-                    <div className="space-y-2">
-                      <h4 className="font-medium">AI Assistant Mode</h4>
-                      <div className="grid grid-cols-3 gap-2">
-                        <Button 
-                          variant={assistantMode === 'jarvis' ? "default" : "outline"} 
-                          size="sm"
-                          onClick={() => changeAssistantMode('jarvis')}
-                          className={assistantMode === 'jarvis' ? "bg-blue-600" : ""}
-                        >
-                          J.A.R.V.I.S.
-                        </Button>
-                        <Button 
-                          variant={assistantMode === 'friday' ? "default" : "outline"} 
-                          size="sm"
-                          onClick={() => changeAssistantMode('friday')}
-                          className={assistantMode === 'friday' ? "bg-pink-600" : ""}
-                        >
-                          F.R.I.D.A.Y.
-                        </Button>
-                        <Button 
-                          variant={assistantMode === 'expert' ? "default" : "outline"} 
-                          size="sm"
-                          onClick={() => changeAssistantMode('expert')}
-                          className={assistantMode === 'expert' ? "bg-purple-600" : ""}
-                        >
-                          Expert
-                        </Button>
-                      </div>
-                      <div className="pt-2 border-t">
-                        <h4 className="font-medium mb-1">Voice Type</h4>
-                        <div className="grid grid-cols-3 gap-2">
-                          <Button 
-                            variant={voiceType === 'female' ? "default" : "outline"} 
-                            size="sm"
-                            onClick={() => setVoiceType('female')}
-                          >
-                            Female
-                          </Button>
-                          <Button 
-                            variant={voiceType === 'male' ? "default" : "outline"} 
-                            size="sm"
-                            onClick={() => setVoiceType('male')}
-                          >
-                            Male
-                          </Button>
-                          <Button 
-                            variant={voiceType === 'neutral' ? "default" : "outline"} 
-                            size="sm"
-                            onClick={() => setVoiceType('neutral')}
-                          >
-                            Mute
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Change AI Assistant Mode</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          
-          <Button 
-            size="sm" 
-            variant={isListening ? "default" : "outline"} 
-            className={`p-1 h-auto ${isListening ? "bg-red-500 hover:bg-red-600" : ""}`}
-            onClick={toggleListening}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleVoice}
+            className={voiceEnabled ? "text-purple-600" : "text-gray-400"}
+            title={voiceEnabled ? "Disable voice" : "Enable voice"}
           >
-            {isListening ? (
-              <MicOff className="h-4 w-4 text-white" />
-            ) : (
-              <Mic className="h-4 w-4 text-indigo-600" />
-            )}
+            {voiceEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
           </Button>
           
-          {isSpeaking && (
-            <Badge variant="outline" className="bg-indigo-100 text-indigo-700 animate-pulse flex items-center">
-              <Volume2 className="h-3 w-3 mr-1" />
-              <span>Speaking</span>
-            </Badge>
-          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleVoiceCommand}
+            className={isListening ? "text-purple-600 animate-pulse" : "text-gray-400"}
+            disabled={isListening}
+            title="Voice command"
+          >
+            {isListening ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+          </Button>
         </div>
       </div>
       
       <Tabs defaultValue="chat" className="flex-1 flex flex-col">
-        <TabsList className="mx-3 mt-2 mb-0 grid grid-cols-2">
-          <TabsTrigger value="chat">Chat</TabsTrigger>
-          <TabsTrigger value="insights">AI Insights</TabsTrigger>
+        <TabsList className="grid grid-cols-3 mx-4 mt-4">
+          <TabsTrigger value="chat" className="flex items-center">
+            <MessageSquareMore className="h-4 w-4 mr-2" /> Chat
+          </TabsTrigger>
+          <TabsTrigger value="tools" className="flex items-center">
+            Tools {detectedTools.length > 0 && <Badge className="ml-1 h-5 w-5 p-0 flex items-center justify-center">{detectedTools.length}</Badge>}
+          </TabsTrigger>
+          <TabsTrigger value="analysis" className="flex items-center">
+            Analysis
+          </TabsTrigger>
         </TabsList>
         
         <TabsContent value="chat" className="flex-1 flex flex-col p-0 m-0">
-          <div className="flex-1 overflow-y-auto p-3 space-y-4 max-h-[350px] min-h-[200px]">
-            {conversation.map((message, index) => (
-              <div 
-                key={index}
-                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div 
-                  className={`max-w-[85%] rounded-lg p-3 ${
-                    message.role === 'user' 
-                      ? 'bg-indigo-100 text-indigo-800' 
-                      : assistantMode === 'jarvis'
-                        ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                        : assistantMode === 'friday'
-                          ? 'bg-pink-100 text-pink-800 border border-pink-200'
-                          : 'bg-purple-100 text-purple-800 border border-purple-200'
-                  }`}
-                >
-                  <div className="text-sm mb-1">
-                    {message.content}
-                  </div>
-                  <div className="text-xs opacity-60 text-right">
-                    {getFormattedTime(message.timestamp)}
+          <ScrollArea className="flex-1 p-4">
+            <div className="space-y-4">
+              {messages.map((msg, index) => (
+                <div key={index} className={`flex ${msg.role === 'assistant' ? 'justify-start' : 'justify-end'}`}>
+                  <div
+                    className={`max-w-[80%] rounded-lg p-3 ${
+                      msg.role === 'assistant'
+                        ? 'bg-purple-100 text-purple-900'
+                        : 'bg-blue-100 text-blue-900'
+                    }`}
+                  >
+                    <p className="text-sm whitespace-pre-line">{msg.content}</p>
+                    <p className="text-xs opacity-50 mt-1">
+                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
                   </div>
                 </div>
-              </div>
-            ))}
-            {isThinking && (
-              <div className="flex justify-start">
-                <div 
-                  className={`bg-gray-100 text-gray-800 max-w-[85%] rounded-lg p-3 ${
-                    assistantMode === 'jarvis'
-                      ? 'border border-blue-200'
-                      : assistantMode === 'friday'
-                        ? 'border border-pink-200'
-                        : 'border border-purple-200'
-                  }`}
-                >
-                  <div className="flex items-center space-x-1">
-                    <span className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                    <span className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                    <span className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+              ))}
+              
+              {thinking && (
+                <div className="flex justify-start">
+                  <div className="max-w-[80%] rounded-lg p-3 bg-purple-100 text-purple-900">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                      <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '200ms' }}></div>
+                      <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '400ms' }}></div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
+              
+              <div ref={messagesEndRef} />
+            </div>
+          </ScrollArea>
+          
+          <div className="p-4 border-t mt-auto">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                const message = formData.get('message') as string;
+                if (message.trim()) {
+                  addUserMessage(message);
+                  e.currentTarget.reset();
+                }
+              }}
+              className="flex space-x-2"
+            >
+              <input
+                type="text"
+                name="message"
+                placeholder="Ask me for makeup help..."
+                className="flex-1 border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"
+              />
+              <Button type="submit">Send</Button>
+            </form>
+          </div>
+        </TabsContent>
+        
+        <TabsContent value="tools" className="space-y-4 p-4 h-full">
+          <div>
+            <h3 className="font-medium mb-2">Detected Makeup Tools</h3>
+            {detectedTools.length > 0 ? (
+              <ul className="space-y-2">
+                {detectedTools.map((tool, idx) => (
+                  <li key={idx} className="bg-purple-50 p-2 rounded-lg flex justify-between items-center">
+                    <span>{tool.type}</span>
+                    <Badge variant="secondary">
+                      {Math.round(tool.confidence * 100)}%
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-500">No makeup tools detected. Hold up brushes or products so I can see them.</p>
             )}
-            <div ref={messagesEndRef} />
           </div>
           
-          <div className="p-3 border-t border-indigo-100">
-            <div className="flex gap-2">
-              <Input
-                value={userInput}
-                onChange={(e) => {
-                  setUserInput(e.target.value);
-                  lastUserActivityRef.current = Date.now();
-                }}
-                onKeyPress={handleKeyPress}
-                placeholder={`Ask ${assistantMode.toUpperCase()} about makeup...`}
-                className="flex-1 border-indigo-200"
-              />
-              <Button 
-                onClick={sendMessage} 
-                disabled={!userInput.trim() || isThinking}
-                className={
-                  assistantMode === 'jarvis'
-                    ? 'bg-blue-600 hover:bg-blue-700'
-                    : assistantMode === 'friday'
-                      ? 'bg-pink-600 hover:bg-pink-700' 
-                      : 'bg-purple-600 hover:bg-purple-700'
-                }
-              >
-                <MessageSquare className="h-4 w-4" />
-              </Button>
-            </div>
-            {isListening && (
-              <div className={`text-xs mt-1 animate-pulse ${
-                assistantMode === 'jarvis'
-                  ? 'text-blue-600'
-                  : assistantMode === 'friday'
-                    ? 'text-pink-600' 
-                    : 'text-purple-600'
-              }`}>
-                Listening... Say something or click the mic button to stop.
+          <div>
+            <h3 className="font-medium mb-2">Makeup Knowledge Base</h3>
+            {loadingKnowledge ? (
+              <div className="flex items-center justify-center p-4">
+                <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                <span>Loading makeup knowledge...</span>
               </div>
+            ) : knowledge ? (
+              <div className="space-y-2">
+                <p className="text-sm">Products in knowledge base: {Object.keys(knowledge.products).length}</p>
+                <div className="flex flex-wrap gap-2">
+                  {Object.keys(knowledge.products).slice(0, 6).map(product => (
+                    <Badge key={product} variant="outline">{product}</Badge>
+                  ))}
+                  {Object.keys(knowledge.products).length > 6 && (
+                    <Badge variant="outline">+{Object.keys(knowledge.products).length - 6} more</Badge>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">Cosmetology knowledge base not available.</p>
+            )}
+          </div>
+          
+          <div>
+            <h3 className="font-medium mb-2">Current Step</h3>
+            {currentStep ? (
+              <p className="bg-purple-50 p-3 rounded text-sm">{currentStep}</p>
+            ) : (
+              <p className="text-sm text-gray-500">No current step selected.</p>
             )}
           </div>
         </TabsContent>
         
-        <TabsContent value="insights" className="flex-1 overflow-y-auto p-3">
-          <div className="space-y-4">
-            {/* Facial Analysis */}
-            <div className="bg-white rounded-lg p-3 shadow-sm border border-indigo-100">
-              <h4 className="font-medium text-gray-800 mb-2">Facial Analysis</h4>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                {facialTraits?.skinTone && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Skin Tone:</span>
-                    <span className="font-medium">{facialTraits.skinTone}</span>
-                  </div>
-                )}
-                {facialTraits?.faceShape && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Face Shape:</span>
-                    <span className="font-medium">{facialTraits.faceShape}</span>
-                  </div>
-                )}
-                {facialAttributes?.skinType && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Skin Type:</span>
-                    <span className="font-medium">{facialAttributes.skinType}</span>
-                  </div>
-                )}
-                {facialAttributes?.expression && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Expression:</span>
-                    <span className="font-medium">{facialAttributes.expression}</span>
-                  </div>
-                )}
-                {facialAttributes?.age && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Est. Age:</span>
-                    <span className="font-medium">{facialAttributes.age}</span>
-                  </div>
-                )}
-              </div>
-              
-              {facialTraits?.features && facialTraits.features.length > 0 && (
-                <div className="mt-2">
-                  <h5 className="text-sm text-gray-600 mb-1">Features:</h5>
-                  <div className="flex flex-wrap gap-1">
-                    {facialTraits.features.map((feature, idx) => (
-                      <Badge key={idx} variant="outline" className="bg-indigo-50">
-                        {feature}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
+        <TabsContent value="analysis" className="space-y-4 p-4 h-full">
+          <div>
+            <h3 className="font-medium mb-2">Face Detection</h3>
+            <div className="flex items-center">
+              <div className={`h-3 w-3 rounded-full mr-2 ${faceDetected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+              <span>{faceDetected ? 'Face Detected' : 'No Face Detected'}</span>
             </div>
-            
-            {/* Detected Tools */}
-            {detectedTools.length > 0 && (
-              <div className="bg-white rounded-lg p-3 shadow-sm border border-indigo-100">
-                <h4 className="font-medium text-gray-800 mb-2">Detected Tools</h4>
-                <div className="space-y-1">
-                  {detectedTools.map((tool, idx) => (
-                    <div key={idx} className="flex justify-between text-sm">
-                      <span>{tool.type}</span>
-                      <span className="text-indigo-600">{Math.round(tool.confidence * 100)}%</span>
+            {faceDetected && (
+              <Progress value={detectionConfidence * 100} className="mt-2" />
+            )}
+          </div>
+          
+          <div>
+            <h3 className="font-medium mb-2">Facial Attributes</h3>
+            {facialAttributes && (
+              <div className="space-y-2 text-sm">
+                {facialAttributes.skinTone && (
+                  <div className="flex justify-between">
+                    <span>Skin Tone:</span>
+                    <Badge variant="outline">{facialAttributes.skinTone}</Badge>
+                  </div>
+                )}
+                {facialAttributes.faceShape && (
+                  <div className="flex justify-between">
+                    <span>Face Shape:</span>
+                    <Badge variant="outline">{facialAttributes.faceShape}</Badge>
+                  </div>
+                )}
+                {facialAttributes.features && facialAttributes.features.length > 0 && (
+                  <div>
+                    <span className="block mb-1">Features:</span>
+                    <div className="flex flex-wrap gap-2">
+                      {facialAttributes.features.map((feature, idx) => (
+                        <Badge key={idx} variant="outline" className="text-xs">{feature}</Badge>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
               </div>
             )}
-            
-            {/* Recent Actions */}
-            {detectedActions.length > 0 && (
-              <div className="bg-white rounded-lg p-3 shadow-sm border border-indigo-100">
-                <h4 className="font-medium text-gray-800 mb-2">Recent Activity</h4>
-                <div className="space-y-1 max-h-[150px] overflow-y-auto">
-                  {detectedActions.map((action, idx) => (
-                    <div key={idx} className="text-sm flex justify-between">
-                      <span>{action.action}</span>
-                      <span className="text-gray-500 text-xs">
-                        {new Date(action.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+          </div>
+          
+          <div>
+            <h3 className="font-medium mb-2">Recent Actions</h3>
+            {detectedActions.length > 0 ? (
+              <ul className="space-y-2">
+                {detectedActions.slice(0, 4).map((action, idx) => (
+                  <li key={idx} className="bg-gray-50 p-2 rounded-lg text-sm flex justify-between">
+                    <span>{action.action}</span>
+                    <span className="text-gray-400 text-xs">
+                      {Math.round((Date.now() - action.timestamp) / 1000)}s ago
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-500">No recent actions detected.</p>
             )}
-            
-            {/* Current Step */}
-            {currentStep && (
-              <div className="bg-white rounded-lg p-3 shadow-sm border border-indigo-100">
-                <h4 className="font-medium text-gray-800 mb-1">Current Makeup Step</h4>
-                <p className="text-sm">{currentStep}</p>
-              </div>
+          </div>
+          
+          <div>
+            <h3 className="font-medium mb-2">Makeup Regions</h3>
+            {makeupRegions.length > 0 ? (
+              <ul className="text-sm space-y-1">
+                {Array.from(new Set(makeupRegions.map(r => r.type))).map((type) => (
+                  <li key={type} className="flex items-center">
+                    <div
+                      className="h-3 w-3 rounded-full mr-2"
+                      style={{ 
+                        backgroundColor: makeupRegions.find(r => r.type === type)?.color || '#888' 
+                      }}
+                    ></div>
+                    {type}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-500">No makeup regions detected.</p>
             )}
           </div>
         </TabsContent>

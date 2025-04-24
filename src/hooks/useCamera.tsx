@@ -1,5 +1,5 @@
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 
 export const useCamera = () => {
@@ -31,20 +31,45 @@ export const useCamera = () => {
   // Clean up camera stream when component unmounts
   useEffect(() => {
     return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-        streamRef.current = null;
-      }
+      stopCameraStream();
     };
+  }, []);
+
+  const stopCameraStream = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
   }, []);
 
   const checkDevices = async (): Promise<boolean> => {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
       const videoDevices = devices.filter(device => device.kind === 'videoinput');
-      return videoDevices.length > 0;
+      
+      if (videoDevices.length > 0) {
+        setDeviceNotFound(false);
+        return true;
+      } else {
+        setDeviceNotFound(true);
+        toast({
+          title: "No Camera Found",
+          description: "No video input devices detected. Please connect a camera and try again.",
+          variant: "destructive",
+        });
+        return false;
+      }
     } catch (error) {
       console.error('Error checking devices:', error);
+      setDeviceNotFound(true);
+      toast({
+        title: "Camera Check Failed",
+        description: "An error occurred while checking for cameras.",
+        variant: "destructive",
+      });
       return false;
     }
   };
@@ -52,10 +77,7 @@ export const useCamera = () => {
   const toggleCamera = async () => {
     if (cameraActive) {
       // Stop camera
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-        streamRef.current = null;
-      }
+      stopCameraStream();
       setCameraActive(false);
       return;
     }
@@ -68,12 +90,6 @@ export const useCamera = () => {
     const hasVideoDevices = await checkDevices();
     
     if (!hasVideoDevices) {
-      setDeviceNotFound(true);
-      toast({
-        title: "No Camera Found",
-        description: "No video input devices detected. Please connect a camera and try again.",
-        variant: "destructive",
-      });
       return;
     }
     
@@ -150,8 +166,8 @@ export const useCamera = () => {
     }
   };
 
-  const captureFrame = (): string | null => {
-    if (!videoRef.current || !canvasRef.current) return null;
+  const captureFrame = useCallback((): string | null => {
+    if (!videoRef.current) return null;
     
     try {
       // Create a canvas to capture the current video frame
@@ -168,12 +184,12 @@ export const useCamera = () => {
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
       
       // Convert to base64
-      return canvas.toDataURL('image/jpeg').split(',')[1];
+      return canvas.toDataURL('image/jpeg', 0.9).split(',')[1];
     } catch (error) {
       console.error('Error capturing frame:', error);
       return null;
     }
-  };
+  }, [videoRef]);
 
   return {
     cameraActive,
@@ -184,6 +200,7 @@ export const useCamera = () => {
     captureFrame,
     permissionDenied,
     deviceNotFound,
-    checkDevices
+    checkDevices,
+    stopCameraStream
   };
 };

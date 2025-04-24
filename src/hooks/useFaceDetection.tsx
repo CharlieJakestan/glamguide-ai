@@ -1,260 +1,385 @@
 
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { detectFacialLandmarks, getMovementTrends, getMovementHistory } from '@/lib/faceDetection';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { initFaceDetection, detectFaces, isModelsLoaded } from '@/lib/faceDetection';
+import * as faceapi from '@vladmandic/face-api';
 
 interface UseFaceDetectionProps {
+  videoRef: React.RefObject<HTMLVideoElement>;
   toast: any;
-  videoRef?: React.RefObject<HTMLVideoElement>;
-  enabled?: boolean;
-  onFaceDetectionChange?: (detected: boolean) => void;
-  onMovementChange?: (data: {x: number, y: number, magnitude: number}) => void;
-  onActivityDetected?: (activity: string) => void;
+  enabled: boolean;
+  detectionInterval?: number;
+  onFaceDetected?: (face: any) => void;
+  onFaceLost?: () => void;
 }
 
-export const useFaceDetection = ({ 
-  toast, 
-  videoRef, 
-  enabled = true,
-  onFaceDetectionChange,
-  onMovementChange,
-  onActivityDetected
+interface MovementData {
+  headPose?: {
+    pitch: number; // up/down
+    yaw: number;   // left/right
+    roll: number;  // tilt
+  };
+  eyeMovement?: {
+    left: { x: number; y: number };
+    right: { x: number; y: number };
+  };
+  mouthMovement?: {
+    open: boolean;
+    smiling: boolean;
+  };
+}
+
+export const useFaceDetection = ({
+  videoRef,
+  toast,
+  enabled,
+  detectionInterval = 200,
+  onFaceDetected,
+  onFaceLost
 }: UseFaceDetectionProps) => {
   const [faceDetectionReady, setFaceDetectionReady] = useState(false);
   const [faceDetected, setFaceDetected] = useState(false);
-  const [facePosition, setFacePosition] = useState({ x: 0, y: 0, width: 0, height: 0 });
-  const [movementData, setMovementData] = useState({ x: 0, y: 0, magnitude: 0 });
-  const [lastActivity, setLastActivity] = useState<string | null>(null);
-  const [processingFrame, setProcessingFrame] = useState(false);
+  const [facePosition, setFacePosition] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [detectionConfidence, setDetectionConfidence] = useState(0);
-  
+  const [landmarks, setLandmarks] = useState<any>(null);
+  const [expressions, setExpressions] = useState<faceapi.FaceExpressions | null>(null);
+  const [movementData, setMovementData] = useState<MovementData>({});
+  const [lastActivity, setLastActivity] = useState<string | null>(null);
+
   const detectionIntervalRef = useRef<number | null>(null);
-  const lastDetectionTime = useRef(0);
-  const detectionAttempts = useRef(0);
-  const successfulDetections = useRef(0);
-  const maxFailedAttempts = 3;
-  const detectionHistory = useRef<Array<boolean>>([]);
-  
-  // Detected objects near face (like makeup brushes, products)
-  const [nearbyObjects, setNearbyObjects] = useState<Array<{
-    type: string;
-    confidence: number;
-    position: { x: number, y: number };
-  }>>([]);
+  const lastDetectionRef = useRef<number>(0);
+  const lastFacePositionRef = useRef<any>(null);
+  const lastActivityTimeRef = useRef<number>(Date.now());
+  const faceLostTimeoutRef = useRef<number | null>(null);
 
-  // Activity detection based on movement patterns
+  // Initialize face detection
   useEffect(() => {
-    if (!enabled || !faceDetected) return;
-    
-    // Analyze movement data to detect activities
-    if (movementData.magnitude > 8) {
-      const activity = "Significant head movement detected";
-      setLastActivity(activity);
-      if (onActivityDetected) onActivityDetected(activity);
-    } else if (movementData.magnitude > 3 && movementData.magnitude < 8) {
-      let activity;
-      if (Math.abs(movementData.x) > Math.abs(movementData.y)) {
-        activity = movementData.x > 0 ? "Looking to the right" : "Looking to the left";
-      } else {
-        activity = movementData.y > 0 ? "Looking down" : "Looking up";
+    const setupFaceDetection = async () => {
+      try {
+        const success = await initFaceDetection();
+        setFaceDetectionReady(success);
+        
+        if (!success) {
+          toast({
+            title: "Face Detection Setup Failed",
+            description: "Could not load face detection models. Some features may not work properly.",
+            variant: "destructive"
+          });
+        } else {
+          console.log('Face detection models loaded successfully');
+        }
+      } catch (error) {
+        console.error('Error setting up face detection:', error);
+        setFaceDetectionReady(false);
+        toast({
+          title: "Face Detection Error",
+          description: "An error occurred while setting up face detection.",
+          variant: "destructive"
+        });
       }
-      setLastActivity(activity);
-      if (onActivityDetected) onActivityDetected(activity);
-    } else if (movementData.magnitude < 1 && faceDetected) {
-      // When user is relatively still
-      const activity = "User is looking at the camera";
-      setLastActivity(activity);
-      if (onActivityDetected) onActivityDetected(activity);
-    }
+    };
     
-    // Log significant activities for AI learning
-    if (movementData.magnitude > 3 || detectionAttempts.current % 10 === 0) {
-      console.log('Activity detected:', lastActivity, 'Movement:', movementData);
-    }
+    setupFaceDetection();
+  }, [toast]);
 
-    // Call movement change callback
-    if (onMovementChange) {
-      onMovementChange(movementData);
+  // Calculate face movement data from landmarks
+  const calculateMovementData = useCallback((detection: any): MovementData => {
+    if (!detection || !detection.landmarks) {
+      return {};
     }
-  }, [movementData, faceDetected, enabled, lastActivity, onActivityDetected, onMovementChange]);
-
-  // Run face detection on interval with improved accuracy
-  const runDetection = useCallback(async () => {
-    if (!videoRef?.current || processingFrame) return;
-    
-    const now = Date.now();
-    // More frequent checks for better responsiveness (60ms for approx 15fps detection)
-    if (now - lastDetectionTime.current < 60) return; 
     
     try {
-      setProcessingFrame(true);
-      lastDetectionTime.current = now;
+      const landmarks = detection.landmarks;
+      const positions = landmarks.positions;
       
-      const detection = await detectFacialLandmarks(videoRef.current);
-      const wasDetected = !!detection;
+      // Calculate head pose (simplified estimation)
+      const faceWidth = detection.detection.box.width;
+      const leftEye = landmarks.getLeftEye();
+      const rightEye = landmarks.getRightEye();
+      const nose = landmarks.getNose();
+      const jawOutline = landmarks.getJawOutline();
       
-      // Update detection history for smoother state transitions
-      detectionHistory.current.push(wasDetected);
-      if (detectionHistory.current.length > 5) {
-        detectionHistory.current.shift();
+      // Calculate center points
+      const leftEyeCenter = getAveragePosition(leftEye);
+      const rightEyeCenter = getAveragePosition(rightEye);
+      const noseTip = nose[nose.length - 1];
+      const faceCenter = getAveragePosition(jawOutline);
+      
+      // Calculate eyeline (line between eyes)
+      const eyeLineAngle = Math.atan2(
+        rightEyeCenter.y - leftEyeCenter.y,
+        rightEyeCenter.x - leftEyeCenter.x
+      ) * (180 / Math.PI);
+      
+      // Nose direction for yaw
+      const noseDirection = noseTip.x - faceCenter.x;
+      const yaw = (noseDirection / faceWidth) * 60; // Scale to reasonable degrees
+      
+      // Use the relative position of the nose to estimate pitch
+      const noseHeight = noseTip.y - (leftEyeCenter.y + rightEyeCenter.y) / 2;
+      const normalizedNoseHeight = noseHeight / faceWidth;
+      const pitch = normalizedNoseHeight * 60 - 15; // Scale and offset
+      
+      // Get mouth positions
+      const mouth = landmarks.getMouth();
+      const upperLipCenter = getAveragePosition(mouth.slice(0, 6));
+      const lowerLipCenter = getAveragePosition(mouth.slice(6, 12));
+      const mouthOpen = lowerLipCenter.y - upperLipCenter.y > faceWidth * 0.05;
+      
+      // Check for smile using mouth corners and expressions
+      const mouthCornerLeft = mouth[0];
+      const mouthCornerRight = mouth[6];
+      const mouthWidth = Math.abs(mouthCornerRight.x - mouthCornerLeft.x);
+      const mouthHeight = (lowerLipCenter.y - upperLipCenter.y);
+      const smileRatio = mouthWidth / (mouthHeight || 1);
+      let smiling = smileRatio > 6;
+      
+      // If we have expressions, use them to improve smile detection
+      if (detection.expressions) {
+        const happyConfidence = detection.expressions.happy || 0;
+        if (happyConfidence > 0.7) {
+          smiling = true;
+        } else if (happyConfidence < 0.2) {
+          smiling = false;
+        }
       }
       
-      // Only change detection state when we have a consistent pattern
-      const detectionCount = detectionHistory.current.filter(Boolean).length;
-      const detectionRatio = detectionCount / detectionHistory.current.length;
+      return {
+        headPose: {
+          pitch, // up/down
+          yaw,   // left/right
+          roll: eyeLineAngle   // tilt
+        },
+        eyeMovement: {
+          left: { x: leftEyeCenter.x, y: leftEyeCenter.y },
+          right: { x: rightEyeCenter.x, y: rightEyeCenter.y }
+        },
+        mouthMovement: {
+          open: mouthOpen,
+          smiling: smiling
+        }
+      };
+    } catch (error) {
+      console.error('Error calculating movement data:', error);
+      return {};
+    }
+  }, []);
+
+  // Helper function to get average position of points
+  const getAveragePosition = (points: Array<{ x: number; y: number }>) => {
+    const sum = points.reduce((acc, point) => {
+      return { x: acc.x + point.x, y: acc.y + point.y };
+    }, { x: 0, y: 0 });
+    
+    return {
+      x: sum.x / points.length,
+      y: sum.y / points.length
+    };
+  };
+
+  // Detect significant changes in face position or expression
+  const detectActivity = useCallback((
+    currentMovement: MovementData,
+    previousMovement: MovementData | null,
+    expressions: faceapi.FaceExpressions | null
+  ): string | null => {
+    if (!previousMovement || !currentMovement.headPose) return null;
+    
+    try {
+      // Check for head movements
+      if (previousMovement.headPose && currentMovement.headPose) {
+        const yawDiff = Math.abs(currentMovement.headPose.yaw - (previousMovement.headPose?.yaw || 0));
+        const pitchDiff = Math.abs(currentMovement.headPose.pitch - (previousMovement.headPose?.pitch || 0));
+        const rollDiff = Math.abs(currentMovement.headPose.roll - (previousMovement.headPose?.roll || 0));
+        
+        if (yawDiff > 10) {
+          return currentMovement.headPose.yaw > (previousMovement.headPose?.yaw || 0) ? 
+            "head turned right" : "head turned left";
+        }
+        
+        if (pitchDiff > 10) {
+          return currentMovement.headPose.pitch > (previousMovement.headPose?.pitch || 0) ?
+            "head tilted down" : "head tilted up";
+        }
+        
+        if (rollDiff > 10) {
+          return currentMovement.headPose.roll > (previousMovement.headPose?.roll || 0) ?
+            "head tilted right" : "head tilted left";
+        }
+      }
       
-      if (wasDetected) {
-        successfulDetections.current++;
-        detectionAttempts.current = 0;
+      // Check for mouth movements
+      if (currentMovement.mouthMovement?.open && (!previousMovement.mouthMovement?.open)) {
+        return "opened mouth";
+      }
+      
+      if (!currentMovement.mouthMovement?.open && previousMovement.mouthMovement?.open) {
+        return "closed mouth";
+      }
+      
+      if (currentMovement.mouthMovement?.smiling && !previousMovement.mouthMovement?.smiling) {
+        return "started smiling";
+      }
+      
+      // Check for expressions if available
+      if (expressions) {
+        if (expressions.happy > 0.7) return "happy";
+        if (expressions.surprised > 0.7) return "surprised";
+        if (expressions.angry > 0.7) return "angry";
+        if (expressions.disgusted > 0.7) return "disgusted";
+        if (expressions.fearful > 0.7) return "fearful";
+        if (expressions.sad > 0.7) return "sad";
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error detecting activity:', error);
+      return null;
+    }
+  }, []);
+
+  // Run face detection loop
+  const runFaceDetection = useCallback(async () => {
+    if (!videoRef.current || !faceDetectionReady || !enabled) return;
+    
+    try {
+      const now = Date.now();
+      const timeSinceLastRun = now - lastDetectionRef.current;
+      
+      // Don't run too often to avoid performance issues
+      if (timeSinceLastRun < detectionInterval) return;
+      
+      lastDetectionRef.current = now;
+      
+      const detections = await detectFaces(videoRef.current);
+      
+      if (detections && detections.length > 0) {
+        // Take the detection with highest confidence if multiple faces are detected
+        const bestDetection = detections.reduce((prev, current) => 
+          (current.detection.score > prev.detection.score) ? current : prev
+        );
         
-        // Update detection confidence
-        setDetectionConfidence(Math.min(successfulDetections.current / 10, 1));
+        const { detection, landmarks: faceLandmarks, expressions: faceExpressions } = bestDetection;
+        const { box } = detection;
         
-        // If we have high confidence and face wasn't detected before, update state
-        if (detectionRatio > 0.6 && !faceDetected) {
+        // Convert to percentages for responsive display
+        const videoWidth = videoRef.current.videoWidth;
+        const videoHeight = videoRef.current.videoHeight;
+        
+        const normalizedPosition = {
+          x: (box.x / videoWidth) * 100,
+          y: (box.y / videoHeight) * 100,
+          width: (box.width / videoWidth) * 100,
+          height: (box.height / videoHeight) * 100
+        };
+        
+        const confidence = detection.score;
+        
+        setFacePosition(normalizedPosition);
+        setDetectionConfidence(confidence);
+        setLandmarks(faceLandmarks);
+        setExpressions(faceExpressions);
+        
+        if (!faceDetected) {
           setFaceDetected(true);
-          if (onFaceDetectionChange) onFaceDetectionChange(true);
+          if (onFaceDetected) {
+            onFaceDetected(bestDetection);
+          }
           
-          toast({
-            title: "Face Detected",
-            description: "AI is now tracking your face",
-            variant: "default",
-            duration: 2000,
-          });
+          // Clear any pending face lost timeout
+          if (faceLostTimeoutRef.current) {
+            window.clearTimeout(faceLostTimeoutRef.current);
+            faceLostTimeoutRef.current = null;
+          }
         }
         
-        // Get face position and dimensions with better precision
-        if (detection) {
-          const boundingBox = detection.detection.box;
-          setFacePosition({
-            x: boundingBox.x,
-            y: boundingBox.y,
-            width: boundingBox.width,
-            height: boundingBox.height
-          });
-          
-          // Get movement trends
-          const trends = getMovementTrends();
-          setMovementData(trends);
-          
-          // Detect nearby objects 
-          detectNearbyObjects(detection);
+        // Calculate movement data
+        const currentMovementData = calculateMovementData(bestDetection);
+        setMovementData(currentMovementData);
+        
+        // Detect activity
+        const activity = detectActivity(
+          currentMovementData,
+          lastFacePositionRef.current,
+          faceExpressions
+        );
+        
+        if (activity) {
+          setLastActivity(activity);
+          lastActivityTimeRef.current = now;
+        } else if (now - lastActivityTimeRef.current > 10000) {
+          // If no activity for 10 seconds, clear last activity
+          setLastActivity(null);
         }
+        
+        lastFacePositionRef.current = currentMovementData;
       } else {
-        detectionAttempts.current++;
-        successfulDetections.current = Math.max(0, successfulDetections.current - 1);
-        
-        // Only set faceDetected to false after multiple consistent failures
-        if (detectionRatio < 0.2 && faceDetected && detectionAttempts.current > maxFailedAttempts) {
-          setFaceDetected(false);
-          if (onFaceDetectionChange) onFaceDetectionChange(false);
-          
-          toast({
-            title: "Face Lost",
-            description: "Please position your face in the camera view",
-            variant: "destructive",
-            duration: 2000,
-          });
+        // No face detected in this frame, but don't immediately set faceDetected to false
+        // to avoid flickering. Instead, set a short timeout.
+        if (faceDetected && !faceLostTimeoutRef.current) {
+          faceLostTimeoutRef.current = window.setTimeout(() => {
+            setFaceDetected(false);
+            setFacePosition(null);
+            setDetectionConfidence(0);
+            if (onFaceLost) {
+              onFaceLost();
+            }
+            faceLostTimeoutRef.current = null;
+          }, 1000); // Wait 1 second before declaring face lost
         }
       }
     } catch (error) {
-      console.error('Face detection error:', error);
-      detectionAttempts.current++;
-    } finally {
-      setProcessingFrame(false);
-    }
-  }, [videoRef, faceDetected, processingFrame, toast, onFaceDetectionChange]);
-
-  // Run detection on interval with higher frequency for better responsiveness
-  useEffect(() => {
-    if (!enabled || !videoRef?.current) {
-      if (detectionIntervalRef.current) {
-        window.clearInterval(detectionIntervalRef.current);
-        detectionIntervalRef.current = null;
-      }
-      return;
+      console.error('Error in face detection:', error);
     }
     
-    // More frequent interval (60ms) for better real-time tracking
-    detectionIntervalRef.current = window.setInterval(runDetection, 60);
+    // Schedule next run
+    detectionIntervalRef.current = window.setTimeout(runFaceDetection, detectionInterval);
+  }, [videoRef, faceDetectionReady, enabled, detectionInterval, faceDetected, onFaceDetected, onFaceLost, calculateMovementData, detectActivity]);
+
+  // Start/stop face detection based on enabled state
+  useEffect(() => {
+    if (enabled && faceDetectionReady) {
+      runFaceDetection();
+    } else {
+      if (detectionIntervalRef.current) {
+        window.clearTimeout(detectionIntervalRef.current);
+      }
+      if (faceLostTimeoutRef.current) {
+        window.clearTimeout(faceLostTimeoutRef.current);
+      }
+    }
     
     return () => {
       if (detectionIntervalRef.current) {
-        window.clearInterval(detectionIntervalRef.current);
-        detectionIntervalRef.current = null;
+        window.clearTimeout(detectionIntervalRef.current);
+      }
+      if (faceLostTimeoutRef.current) {
+        window.clearTimeout(faceLostTimeoutRef.current);
       }
     };
-  }, [enabled, videoRef, runDetection]);
+  }, [enabled, faceDetectionReady, runFaceDetection]);
 
-  // Enhanced object detection with better accuracy
-  const detectNearbyObjects = (detection: any) => {
-    const video = videoRef?.current;
-    if (!video) return;
-    
-    // Simulate makeup tools detection (in a real implementation, this would be AI-based)
-    if (Math.random() < 0.2) { // More frequent detection to appear more responsive
-      // Common makeup tools
-      const products = [
-        'Foundation brush',
-        'Lipstick',
-        'Eyeshadow palette', 
-        'Blush brush',
-        'Makeup sponge',
-        'Concealer',
-        'Mascara wand',
-        'Eyeliner pen'
-      ];
-      
-      // Calculate a position that's actually near the face for more accurate visualization
-      const faceCenterX = facePosition.x + facePosition.width / 2;
-      const faceCenterY = facePosition.y + facePosition.height / 2;
-      
-      // Simulate positions that make sense (near the face)
-      const offsetX = (Math.random() - 0.5) * 1.5 * facePosition.width;
-      const offsetY = (Math.random() - 0.5) * 1.5 * facePosition.height;
-      
-      const detectedProduct = products[Math.floor(Math.random() * products.length)];
-      
-      const newObject = {
-        type: detectedProduct,
-        confidence: 0.7 + Math.random() * 0.3,
-        position: { 
-          x: faceCenterX + offsetX, 
-          y: faceCenterY + offsetY 
-        }
-      };
-      
-      setNearbyObjects([newObject]);
-      
-      const activity = `Detected ${detectedProduct}`;
-      setLastActivity(activity);
-      if (onActivityDetected) onActivityDetected(activity);
-      
-      console.log('Detected makeup object:', detectedProduct, 'near face at position:', {
-        x: faceCenterX + offsetX,
-        y: faceCenterY + offsetY
-      });
-      
-      // Clear after a few seconds
-      setTimeout(() => {
-        setNearbyObjects([]);
-      }, 3000);
-    }
-  };
-
-  // Get movement history for AI learning
-  const getMovementHistoryData = () => {
-    return getMovementHistory();
-  };
+  // Reset face detection on component unmount
+  useEffect(() => {
+    return () => {
+      if (detectionIntervalRef.current) {
+        window.clearTimeout(detectionIntervalRef.current);
+      }
+      if (faceLostTimeoutRef.current) {
+        window.clearTimeout(faceLostTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return {
     faceDetectionReady,
     setFaceDetectionReady,
     faceDetected,
     facePosition,
+    detectionConfidence,
+    landmarks,
+    expressions,
     movementData,
     lastActivity,
-    nearbyObjects,
-    getMovementHistoryData,
-    detectionConfidence
+    isModelsLoaded: isModelsLoaded
   };
 };

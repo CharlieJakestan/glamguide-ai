@@ -24,8 +24,7 @@ const ERROR_COOLDOWN = 5000; // 5 seconds between error messages
 let simulationMode = false;
 
 /**
- * Get GAN model from Supabase storage using the Edge Function
- * This uses the hardcoded file list approach to avoid the list() method issue
+ * Get GAN model from Supabase storage using the AI Makeup Manager edge function
  */
 export const getGanModel = async (style: string = 'casual_day'): Promise<GanModel | null> => {
   try {
@@ -47,9 +46,13 @@ export const getGanModel = async (style: string = 'casual_day'): Promise<GanMode
 
     console.log('Fetching GAN model for style:', style);
     
-    // Call the Edge Function to get model info and signed URLs
-    const { data, error } = await supabase.functions.invoke('get-gan-model', {
-      body: { style },
+    // Call the new AI Makeup Manager edge function to get model info
+    const { data, error } = await supabase.functions.invoke('ai-makeup-manager', {
+      body: { 
+        action: 'get-model',
+        modelType: 'gan',
+        style
+      },
     });
 
     if (error) {
@@ -62,8 +65,8 @@ export const getGanModel = async (style: string = 'casual_day'): Promise<GanMode
       };
     }
 
-    if (data.status !== 'ok' || !data.files || !data.downloadUrls) {
-      console.error('Invalid response from get-gan-model function:', data);
+    if (data.status !== 'ok' || !data.modelUrl) {
+      console.error('Invalid response from ai-makeup-manager function:', data);
       simulationMode = true;
       return {
         fileName: 'mock_model.h5',
@@ -72,19 +75,9 @@ export const getGanModel = async (style: string = 'casual_day'): Promise<GanMode
       };
     }
 
-    // For this example, we'll just use the first file
-    const fileName = data.files[0];
-    const downloadUrl = data.downloadUrls[fileName];
-
-    if (!downloadUrl) {
-      console.error('No download URL provided for file:', fileName);
-      simulationMode = true;
-      return {
-        fileName: 'mock_model.h5',
-        downloadUrl: 'https://example.com/mock-model/model.h5',
-        style
-      };
-    }
+    // Get model info from the response
+    const fileName = 'makeup_gan_models_final_resized.h5';
+    const downloadUrl = data.modelUrl;
 
     const model: GanModel = {
       fileName,
@@ -114,9 +107,7 @@ export const getGanModel = async (style: string = 'casual_day'): Promise<GanMode
 };
 
 /**
- * Generate makeup using the GAN model
- * In a real implementation, this would send the face image to a backend service
- * that applies the GAN model. For now, we'll use a mock implementation.
+ * Generate makeup using the GAN model via the AI Makeup Manager edge function
  */
 export const generateMakeupLook = async (
   faceImageData: string,
@@ -128,54 +119,95 @@ export const generateMakeupLook = async (
     
     if (!model) {
       console.error('Failed to get GAN model');
-      return getMockPrediction(faceImageData);
+      return null;
     }
 
     console.log(`Using GAN model: ${model.fileName} for style: ${style}`);
     
-    // Check if we're in simulation mode
-    if (simulationMode || model.fileName === 'mock_model.h5') {
-      console.log('Using simulation mode for makeup generation');
-      return getMockPrediction(faceImageData);
+    // Use the AI Makeup Manager edge function for analysis
+    const { data, error } = await supabase.functions.invoke('ai-makeup-manager', {
+      body: { 
+        action: 'analyze-face',
+        image: faceImageData,
+        lookId: style
+      },
+    });
+    
+    if (error) {
+      console.error('Error analyzing face image:', error);
+      return null;
     }
     
-    // In a real implementation, we would use the model to generate makeup
-    // For now, return mock data
-    return getMockPrediction(faceImageData);
+    if (data.status !== 'ok' || !data.result) {
+      console.error('Invalid response from analyze-face:', data);
+      return null;
+    }
+    
+    // Extract facial analysis from the result
+    const { imageUrl, analysis } = data.result;
+    
+    return {
+      imageUrl,
+      facialAnalysis: {
+        skinTone: analysis.skinTone,
+        faceShape: analysis.faceShape,
+        features: analysis.features || []
+      }
+    };
   } catch (err) {
     console.error('Error in generateMakeupLook:', err);
-    return getMockPrediction(faceImageData);
+    return null;
   }
 };
 
-// Helper function to get mock prediction
-const getMockPrediction = (faceImageData: string): GanPredictionResult => {
-  const mockSkinTones = ['Fair', 'Light', 'Medium', 'Olive', 'Tan', 'Deep'];
-  const mockFaceShapes = ['Oval', 'Round', 'Heart', 'Square', 'Diamond', 'Rectangle'];
-  const mockFeatures = [
-    'High cheekbones', 'Defined jawline', 'Prominent brow', 'Wide-set eyes',
-    'Full lips', 'Narrow nose', 'Arched eyebrows', 'Defined cupid\'s bow'
-  ];
-
-  // Mock random selection for demo
-  const skinTone = mockSkinTones[Math.floor(Math.random() * mockSkinTones.length)];
-  const faceShape = mockFaceShapes[Math.floor(Math.random() * mockFaceShapes.length)];
-  
-  // Select 2-4 random features
-  const featureCount = 2 + Math.floor(Math.random() * 3);
-  const selectedFeatures = [];
-  const shuffledFeatures = [...mockFeatures].sort(() => 0.5 - Math.random());
-  
-  for (let i = 0; i < featureCount; i++) {
-    selectedFeatures.push(shuffledFeatures[i]);
-  }
-
-  return {
-    imageUrl: faceImageData,
-    facialAnalysis: {
-      skinTone,
-      faceShape,
-      features: selectedFeatures
+// Function to check if the AI Makeup Manager edge function is working
+export const checkAiMakeupManager = async (): Promise<boolean> => {
+  try {
+    const { data, error } = await supabase.functions.invoke('ai-makeup-manager', {
+      body: { action: 'check-status' },
+    });
+    
+    if (error) {
+      console.error('Error checking AI Makeup Manager:', error);
+      return false;
     }
-  };
+    
+    return data && data.status === 'ok';
+  } catch (err) {
+    console.error('Exception checking AI Makeup Manager:', err);
+    return false;
+  }
+};
+
+// Set or check simulation mode
+export const setSimulationMode = (enabled?: boolean): boolean => {
+  if (enabled !== undefined) {
+    simulationMode = enabled;
+  }
+  return simulationMode;
+};
+
+// Request model training
+export const trainGanModel = async (trainingData: string[]): Promise<{success: boolean, jobId?: string}> => {
+  try {
+    const { data, error } = await supabase.functions.invoke('ai-makeup-manager', {
+      body: { 
+        action: 'train-model',
+        trainingData
+      },
+    });
+    
+    if (error) {
+      console.error('Error training GAN model:', error);
+      return { success: false };
+    }
+    
+    return { 
+      success: data && data.status === 'ok', 
+      jobId: data?.jobId
+    };
+  } catch (err) {
+    console.error('Exception training GAN model:', err);
+    return { success: false };
+  }
 };

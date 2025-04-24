@@ -32,7 +32,7 @@ export const useSetupStatus = () => {
         setSimulationMode(false);
         toast({
           title: "Setup Complete",
-          description: "The GAN model and edge function are ready to use!",
+          description: "The AI Makeup Manager is ready to use!",
         });
       } else if (!edgeFunctionWorking && !modelFilesExist) {
         setSetupStatus('not_started');
@@ -63,116 +63,104 @@ export const useSetupStatus = () => {
     }
   }, [toast]);
 
-  // Check for model files in Supabase storage
+  // Check for model files in Supabase storage using the edge function
   const checkModelFilesExist = useCallback(async (): Promise<boolean> => {
     try {
-      console.log('Checking for model files in storage...');
+      console.log('Checking for model files via AI Makeup Manager...');
       setModelStatus('checking');
       
-      // Try to list buckets to see if storage is accessible
-      const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+      // Call the AI Makeup Manager edge function to check model status
+      const { data, error } = await supabase.functions.invoke('ai-makeup-manager', {
+        body: { action: 'check-status' },
+      });
       
-      if (bucketsError) {
-        console.error('Error accessing storage buckets:', bucketsError);
+      if (error) {
+        console.error('Error checking model files via edge function:', error);
         setModelStatus('error');
         return false;
       }
       
-      const ganBucket = buckets?.find(bucket => bucket.name === 'gantrainingfiles');
-      
-      if (!ganBucket) {
-        console.warn('gantrainingfiles bucket not found');
+      // Check if the response indicates model files exist
+      if (data && data.status === 'ok' && data.modelStatus) {
+        const { ganModelExists, faceModelsExist } = data.modelStatus;
         
-        try {
-          // Create the bucket if it doesn't exist
-          console.log('Attempting to create gantrainingfiles bucket');
-          const { error } = await supabase.storage.createBucket('gantrainingfiles', { public: true });
-          
-          if (error) {
-            console.error('Error creating bucket:', error);
-            setModelStatus('error');
-            return false;
-          }
-          
-          console.log('Successfully created gantrainingfiles bucket');
-          
-          // Upload a placeholder file to validate permissions
-          const placeholderData = new Blob(['placeholder content'], { type: 'text/plain' });
-          const { error: uploadError } = await supabase.storage
-            .from('gantrainingfiles')
-            .upload('placeholder.txt', placeholderData);
-          
-          if (uploadError) {
-            console.error('Error uploading placeholder:', uploadError);
-            setModelStatus('error');
-            return false;
-          }
-          
-          // Mark as ready even though we're using placeholders
+        if (ganModelExists && faceModelsExist) {
+          console.log('Model files verified via edge function');
           setModelStatus('ready');
           return true;
-          
-        } catch (error) {
-          console.error('Error creating bucket or uploading:', error);
+        } else {
+          console.log('Some model files missing according to edge function check');
           setModelStatus('error');
           return false;
         }
       }
       
-      // Check for files in the bucket
+      // If we're here, the edge function didn't return proper model status
+      console.warn('Edge function did not provide adequate model status information');
+      
+      // Fall back to direct storage check
       try {
-        const { data: files, error } = await supabase.storage
-          .from('gantrainingfiles')
-          .list();
+        // Try to list buckets to see if storage is accessible
+        const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
         
-        if (error) {
-          console.error('Error listing files:', error);
+        if (bucketsError) {
+          console.error('Error accessing storage buckets:', bucketsError);
           setModelStatus('error');
           return false;
         }
         
-        const modelFiles = files?.filter(file => 
+        const ganBucket = buckets?.find(bucket => bucket.name === 'gantrainingfiles');
+        const modelsBucket = buckets?.find(bucket => bucket.name === 'makeup-models');
+        
+        if (!ganBucket || !modelsBucket) {
+          console.warn('Required storage buckets not found');
+          setModelStatus('error');
+          return false;
+        }
+        
+        // Check for files in the GAN bucket
+        const { data: ganFiles, error: ganError } = await supabase.storage
+          .from('gantrainingfiles')
+          .list();
+        
+        if (ganError) {
+          console.error('Error listing GAN files:', ganError);
+          setModelStatus('error');
+          return false;
+        }
+        
+        const ganModelExists = ganFiles?.some(file => 
           file.name.endsWith('.h5') || 
           file.name.endsWith('.model') || 
           file.name.endsWith('.weights')
         );
         
-        if (modelFiles && modelFiles.length > 0) {
-          console.log('Found model files:', modelFiles);
+        // Check for face detection model files
+        const { data: faceFiles, error: faceError } = await supabase.storage
+          .from('makeup-models')
+          .list('face-detection');
+        
+        // It's okay if the face-detection folder doesn't exist yet
+        if (faceError && !faceError.message.includes('not found')) {
+          console.error('Error listing face model files:', faceError);
+        }
+        
+        const faceModelsExist = faceFiles && faceFiles.length > 0;
+        
+        if (ganModelExists && faceModelsExist) {
+          console.log('Model files verified via direct storage check');
           setModelStatus('ready');
           return true;
         } else {
-          console.log('No model files found, will use simulation mode');
-          
-          // Upload a placeholder model file
-          try {
-            const placeholderData = new Blob(['mock model data'], { type: 'application/octet-stream' });
-            await supabase.storage
-              .from('gantrainingfiles')
-              .upload('makeup_gan_models_final_resized.h5', placeholderData)
-              .then(({ error }) => {
-                if (error) {
-                  console.error('Error uploading placeholder model:', error);
-                } else {
-                  console.log('Uploaded placeholder model file');
-                  setModelStatus('ready');
-                  return true;
-                }
-              });
-          } catch (uploadError) {
-            console.error('Error uploading placeholder model:', uploadError);
-          }
-          
-          // We'll mark it as ready anyway so the app can function in simulation mode
-          setModelStatus('ready');
-          return true;
+          console.log('Some model files missing according to direct storage check');
+          setModelStatus('error');
+          return false;
         }
       } catch (error) {
         console.error('Error checking for files:', error);
         setModelStatus('error');
         return false;
       }
-      
     } catch (error) {
       console.error('Error checking model files:', error);
       setModelStatus('error');
@@ -187,11 +175,11 @@ export const useSetupStatus = () => {
       const isActive = await checkGanFunction();
       
       if (isActive) {
-        console.log('Edge function is working');
+        console.log('AI Makeup Manager edge function is working');
         setEdgeFunctionStatus('ready');
         return true;
       } else {
-        console.warn('Edge function check failed');
+        console.warn('AI Makeup Manager edge function check failed');
         setEdgeFunctionStatus('error');
         return false;
       }
