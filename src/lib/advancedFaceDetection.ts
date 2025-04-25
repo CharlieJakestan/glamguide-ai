@@ -1,14 +1,26 @@
-
 import * as faceapi from '@vladmandic/face-api';
-import * as facemesh from '@mediapipe/face_mesh';
-import { Camera } from '@mediapipe/camera_utils';
-import { drawConnectors } from '@mediapipe/drawing_utils';
+
+// Safely import MediaPipe libraries with error handling
+let facemesh: any = null;
+let Camera: any = null;
+let drawConnectors: any = null;
+
+try {
+  facemesh = require('@mediapipe/face_mesh');
+  const cameraUtils = require('@mediapipe/camera_utils');
+  const drawingUtils = require('@mediapipe/drawing_utils');
+  
+  Camera = cameraUtils.Camera;
+  drawConnectors = drawingUtils.drawConnectors;
+} catch (error) {
+  console.warn('MediaPipe libraries not available:', error);
+}
 
 // Track model loading state
 let modelsLoaded = false;
 let mediapipeLoaded = false;
-let faceMeshInstance: facemesh.FaceMesh | null = null;
-let cameraInstance: Camera | null = null;
+let faceMeshInstance: any = null;
+let cameraInstance: any = null;
 
 // Store movement data for analysis
 const movementHistory: Array<{x: number, y: number, magnitude: number, timestamp: number}> = [];
@@ -33,26 +45,33 @@ export const initAdvancedFaceDetection = async (): Promise<boolean> => {
       console.log('Face-api.js models loaded successfully');
     }
     
-    // Initialize MediaPipe FaceMesh
-    if (!mediapipeLoaded) {
-      faceMeshInstance = new facemesh.FaceMesh({
-        locateFile: (file) => {
-          return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
-        }
-      });
-      
-      faceMeshInstance.setOptions({
-        maxNumFaces: 1,
-        refineLandmarks: true,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5
-      });
-      
-      mediapipeLoaded = true;
-      console.log('MediaPipe FaceMesh initialized successfully');
+    // Initialize MediaPipe FaceMesh if available
+    if (!mediapipeLoaded && facemesh && facemesh.FaceMesh) {
+      try {
+        faceMeshInstance = new facemesh.FaceMesh({
+          locateFile: (file: string) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+          }
+        });
+        
+        faceMeshInstance.setOptions({
+          maxNumFaces: 1,
+          refineLandmarks: true,
+          minDetectionConfidence: 0.5,
+          minTrackingConfidence: 0.5
+        });
+        
+        mediapipeLoaded = true;
+        console.log('MediaPipe FaceMesh initialized successfully');
+      } catch (error) {
+        console.error('Error initializing MediaPipe FaceMesh:', error);
+        return modelsLoaded; // Return true if at least face-api models loaded
+      }
+    } else if (!facemesh || !facemesh.FaceMesh) {
+      console.warn('MediaPipe FaceMesh not available. Some features will be limited.');
     }
     
-    return true;
+    return modelsLoaded || mediapipeLoaded;
   } catch (error) {
     console.error('Error initializing advanced face detection:', error);
     return false;
@@ -64,84 +83,135 @@ export const setupAdvancedCamera = (
   videoElement: HTMLVideoElement,
   canvasElement: HTMLCanvasElement,
   onFaceDetected: (detected: boolean, landmarks?: any) => void,
-  onResults: (results: facemesh.Results) => void
+  onResults: (results: any) => void
 ): void => {
   if (!faceMeshInstance) {
     console.error('FaceMesh not initialized');
+    
+    // Fallback to basic face detection if MediaPipe is not available
+    const detectInterval = setInterval(() => {
+      if (!videoElement || videoElement.paused || videoElement.ended) return;
+      
+      // Use face-api.js as fallback
+      faceapi.detectSingleFace(videoElement, new faceapi.TinyFaceDetectorOptions())
+        .then(detection => {
+          const detected = !!detection;
+          onFaceDetected(detected, null);
+          
+          if (detected && canvasElement) {
+            const ctx = canvasElement.getContext('2d');
+            if (ctx) {
+              ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+              ctx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+              
+              // Draw basic face detection box
+              if (detection) {
+                ctx.strokeStyle = '#00FF00';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(
+                  detection.box.x, 
+                  detection.box.y, 
+                  detection.box.width, 
+                  detection.box.height
+                );
+              }
+            }
+          }
+        })
+        .catch(err => {
+          console.error('Error in fallback face detection:', err);
+          onFaceDetected(false);
+        });
+    }, 100);
+    
     return;
   }
   
-  faceMeshInstance.onResults((results) => {
-    const canvasCtx = canvasElement.getContext('2d');
-    if (!canvasCtx) return;
-    
-    // Clear the canvas
-    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-    
-    // Draw the video frame
-    canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
-    
-    if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-      // Face detected
-      onFaceDetected(true, results.multiFaceLandmarks[0]);
+  try {
+    faceMeshInstance.onResults((results: any) => {
+      const canvasCtx = canvasElement.getContext('2d');
+      if (!canvasCtx) return;
       
-      // Draw a green border around the face instead of the mesh
-      const landmarks = results.multiFaceLandmarks[0];
+      // Clear the canvas
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
       
-      // Calculate bounding box
-      let minX = Number.MAX_VALUE;
-      let minY = Number.MAX_VALUE;
-      let maxX = 0;
-      let maxY = 0;
+      // Draw the video frame
+      canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
       
-      for (const landmark of landmarks) {
-        minX = Math.min(minX, landmark.x * canvasElement.width);
-        minY = Math.min(minY, landmark.y * canvasElement.height);
-        maxX = Math.max(maxX, landmark.x * canvasElement.width);
-        maxY = Math.max(maxY, landmark.y * canvasElement.height);
-      }
-      
-      // Add padding
-      const padding = 20;
-      minX = Math.max(0, minX - padding);
-      minY = Math.max(0, minY - padding);
-      maxX = Math.min(canvasElement.width, maxX + padding);
-      maxY = Math.min(canvasElement.height, maxY + padding);
-      
-      // Draw the border
-      canvasCtx.strokeStyle = '#00FF00';
-      canvasCtx.lineWidth = 3;
-      canvasCtx.strokeRect(minX, minY, maxX - minX, maxY - minY);
-      
-      // Add glow effect
-      canvasCtx.shadowColor = '#00FF00';
-      canvasCtx.shadowBlur = 15;
-      canvasCtx.strokeRect(minX, minY, maxX - minX, maxY - minY);
-      
-      // Reset shadow
-      canvasCtx.shadowBlur = 0;
-      
-      // Call the results callback
-      onResults(results);
-    } else {
-      // No face detected
-      onFaceDetected(false);
-    }
-  });
-  
-  if (!cameraInstance) {
-    cameraInstance = new Camera(videoElement, {
-      onFrame: async () => {
-        if (faceMeshInstance) {
-          await faceMeshInstance.send({image: videoElement});
+      if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+        // Face detected
+        onFaceDetected(true, results.multiFaceLandmarks[0]);
+        
+        // Draw a green border around the face instead of the mesh
+        const landmarks = results.multiFaceLandmarks[0];
+        
+        // Calculate bounding box
+        let minX = Number.MAX_VALUE;
+        let minY = Number.MAX_VALUE;
+        let maxX = 0;
+        let maxY = 0;
+        
+        for (const landmark of landmarks) {
+          minX = Math.min(minX, landmark.x * canvasElement.width);
+          minY = Math.min(minY, landmark.y * canvasElement.height);
+          maxX = Math.max(maxX, landmark.x * canvasElement.width);
+          maxY = Math.max(maxY, landmark.y * canvasElement.height);
         }
-      },
-      width: 640,
-      height: 480
+        
+        // Add padding
+        const padding = 20;
+        minX = Math.max(0, minX - padding);
+        minY = Math.max(0, minY - padding);
+        maxX = Math.min(canvasElement.width, maxX + padding);
+        maxY = Math.min(canvasElement.height, maxY + padding);
+        
+        // Draw the border
+        canvasCtx.strokeStyle = '#00FF00';
+        canvasCtx.lineWidth = 3;
+        canvasCtx.strokeRect(minX, minY, maxX - minX, maxY - minY);
+        
+        // Add glow effect
+        canvasCtx.shadowColor = '#00FF00';
+        canvasCtx.shadowBlur = 15;
+        canvasCtx.strokeRect(minX, minY, maxX - minX, maxY - minY);
+        
+        // Reset shadow
+        canvasCtx.shadowBlur = 0;
+        
+        // Call the results callback
+        onResults(results);
+      } else {
+        // No face detected
+        onFaceDetected(false);
+      }
     });
+    
+    if (!cameraInstance && Camera) {
+      cameraInstance = new Camera(videoElement, {
+        onFrame: async () => {
+          if (faceMeshInstance) {
+            try {
+              await faceMeshInstance.send({image: videoElement});
+            } catch (error) {
+              console.warn('Error sending frame to FaceMesh:', error);
+              onFaceDetected(false);
+            }
+          }
+        },
+        width: 640,
+        height: 480
+      });
+      
+      cameraInstance.start().catch((error: any) => {
+        console.error('Error starting camera:', error);
+      });
+    }
+  } catch (error) {
+    console.error('Error setting up advanced camera:', error);
+    
+    // Fallback to basic functionality
+    onFaceDetected(false);
   }
-  
-  cameraInstance.start();
 };
 
 // Get makeup regions based on face landmarks
@@ -391,9 +461,20 @@ export const trackFacialMovement = (currentLandmarks: any, previousLandmarks: an
 // Clean up resources
 export const cleanupAdvancedFaceDetection = () => {
   if (cameraInstance) {
-    cameraInstance.stop();
+    try {
+      cameraInstance.stop();
+    } catch (error) {
+      console.warn('Error stopping camera:', error);
+    }
     cameraInstance = null;
   }
   
-  faceMeshInstance = null;
+  if (faceMeshInstance) {
+    try {
+      faceMeshInstance.close();
+    } catch (error) {
+      console.warn('Error closing FaceMesh:', error);
+    }
+    faceMeshInstance = null;
+  }
 };

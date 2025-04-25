@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '@/components/Layout';
 import { useToast } from '@/hooks/use-toast';
@@ -72,17 +73,27 @@ const GanGenerator = () => {
   
   useEffect(() => {
     const setupFaceDetection = async () => {
-      const success = await initFaceDetection();
-      setFaceDetectionReady(success);
-      
-      if (!success) {
+      try {
+        const success = await initFaceDetection();
+        setFaceDetectionReady(success);
+        
+        if (!success) {
+          toast({
+            title: "Face Detection Setup",
+            description: "Using simplified face detection mode. Some advanced features may be limited.",
+            variant: "default"
+          });
+        } else {
+          console.log('Face detection models loaded successfully');
+        }
+      } catch (error) {
+        console.error('Error setting up face detection:', error);
+        setFaceDetectionReady(false);
         toast({
           title: "Face Detection Setup Failed",
-          description: "Could not load face detection models. Some features may not work properly.",
-          variant: "destructive"
+          description: "Could not load face detection models. Using simplified mode.",
+          variant: "default"
         });
-      } else {
-        console.log('Face detection models loaded successfully');
       }
     };
     
@@ -228,7 +239,7 @@ const GanGenerator = () => {
   
   const stepNames = lookGuidance.selectedLook?.steps.map(step => step.instruction) || [];
   
-  if (isLoading && !faceDetectionReady) {
+  if (isLoading) {
     return (
       <Layout>
         <div className="max-w-4xl mx-auto mt-10">
@@ -256,11 +267,11 @@ const GanGenerator = () => {
           </p>
           
           {!faceDetectionReady && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertTitle>Face Detection Not Ready</AlertTitle>
+            <Alert variant="warning" className="mb-4">
+              <AlertTitle>Limited Face Detection</AlertTitle>
               <AlertDescription>
-                The face detection system failed to initialize. Some features may not work correctly.
-                Please reload the page or try again later.
+                Using simplified face detection mode. Some advanced features may be limited, 
+                but basic functionality will still work.
               </AlertDescription>
             </Alert>
           )}

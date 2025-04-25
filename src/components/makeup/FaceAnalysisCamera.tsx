@@ -1,14 +1,29 @@
-
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Camera } from '@mediapipe/camera_utils';
-import { FaceMesh, Results, FACEMESH_TESSELATION } from '@mediapipe/face_mesh';
-import { drawConnectors } from '@mediapipe/drawing_utils';
 import GanOutput from './GanOutput';
 import LookProgressTracker from './LookProgressTracker';
 import LookDetailsPanel from './LookDetailsPanel';
 import FacialAnalysisDisplay from './FacialAnalysisDisplay';
 import VoiceGuidance from './VoiceGuidance';
 import { ReferenceLook, getReferenceLookById } from '@/services/lookReferenceService';
+import { Loader2 } from 'lucide-react';
+
+let Camera: any = null;
+let FaceMesh: any = null;
+let drawConnectors: any = null;
+let FACEMESH_TESSELATION: any = null;
+
+try {
+  const mediapipe = require('@mediapipe/face_mesh');
+  const cameraUtils = require('@mediapipe/camera_utils');
+  const drawingUtils = require('@mediapipe/drawing_utils');
+  
+  FaceMesh = mediapipe.FaceMesh;
+  FACEMESH_TESSELATION = mediapipe.FACEMESH_TESSELATION;
+  Camera = cameraUtils.Camera;
+  drawConnectors = drawingUtils.drawConnectors;
+} catch (error) {
+  console.warn('MediaPipe libraries not available:', error);
+}
 
 interface FaceAnalysisCameraProps {
   cameraActive: boolean;
@@ -88,17 +103,16 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
     features: string[];
     recommendations: string[];
   } | null>(null);
+  const [mediapipeAvailable, setMediapipeAvailable] = useState(!!FaceMesh);
   const cameraContainerRef = useRef<HTMLDivElement>(null);
-  const faceMeshRef = useRef<FaceMesh | null>(null);
-  const cameraRef = useRef<Camera | null>(null);
+  const faceMeshRef = useRef<any>(null);
+  const cameraRef = useRef<any>(null);
   const landmarkHistoryRef = useRef<Array<Array<{ x: number; y: number; z: number }>>>([]);
 
-  // Utility function to calculate distance between two points
   const calculateDistance = (p1: { x: number; y: number }, p2: { x: number; y: number }) => {
     return Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2);
   };
 
-  // Smooth landmarks to reduce jitter
   const smoothLandmarks = (landmarks: Array<{ x: number; y: number; z: number }>) => {
     if (landmarkHistoryRef.current.length === 0) {
       landmarkHistoryRef.current.push(landmarks);
@@ -128,7 +142,6 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
     return smoothed;
   };
 
-  // Analyze face shape with refined logic
   const analyzeFaceShape = (landmarks: Array<{ x: number; y: number; z: number }>, width: number, height: number) => {
     const landmarksPixel = landmarks.map(l => ({ x: l.x * width, y: l.y * height }));
     const jawPoints = landmarksPixel.slice(0, 17); // Jawline
@@ -165,7 +178,6 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
     }
   };
 
-  // Analyze skin tone using canvas pixel data
   const analyzeSkinTone = (ctx: CanvasRenderingContext2D, landmarks: Array<{ x: number; y: number; z: number }>, width: number, height: number) => {
     const noseTip = landmarks[168]; // Nose tip as center of ROI
     const roiSize = Math.min(width, height) * 0.1;
@@ -189,7 +201,6 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
     const gMean = gSum / count;
     const bMean = bSum / count;
 
-    // Convert RGB to HSV
     const r = rMean / 255;
     const g = gMean / 255;
     const b = bMean / 255;
@@ -205,7 +216,6 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
     const s = cmax === 0 ? 0 : delta / cmax;
     const v = cmax;
 
-    // Convert RGB to LAB (simplified)
     const [l, a, bLab] = rgbToLab(rMean, gMean, bMean);
 
     if (l < 60 && v < 0.47 && a > 125 && bLab > 125) return 'Dark';
@@ -215,7 +225,6 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
     return 'Tan';
   };
 
-  // Simplified RGB to LAB conversion
   const rgbToLab = (r: number, g: number, b: number) => {
     r /= 255;
     g /= 255;
@@ -248,7 +257,6 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
     return [l, a, bLab];
   };
 
-  // Analyze skin type using pixel variance and brightness
   const analyzeSkinType = (ctx: CanvasRenderingContext2D, landmarks: Array<{ x: number; y: number; z: number }>, width: number, height: number) => {
     const noseTip = landmarks[168];
     const roiSize = Math.min(width, height) * 0.1;
@@ -260,7 +268,6 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
     const imageData = ctx.getImageData(x, y, roiWidth, roiHeight);
     const data = imageData.data;
 
-    // Convert to grayscale and calculate variance
     const grayValues: number[] = [];
     let brightnessSum = 0;
     for (let i = 0; i < data.length; i += 4) {
@@ -273,7 +280,6 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
     const variance = grayValues.reduce((sum, val) => sum + (val - meanBrightness) ** 2, 0) / grayValues.length;
     const stdDev = Math.sqrt(variance);
 
-    // Simplified edge detection using a basic Sobel filter
     let edgeCount = 0;
     for (let i = 1; i < roiHeight - 1; i++) {
       for (let j = 1; j < roiWidth - 1; j++) {
@@ -305,7 +311,7 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
     return 'Combination';
   };
 
-  const onResults = useCallback((results: Results) => {
+  const onResults = useCallback((results: any) => {
     if (!canvasRef.current || !videoRef.current) return;
 
     const canvas = canvasRef.current;
@@ -323,27 +329,34 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
     setLocalFaceDetected(newFaceDetected);
     if (onFaceDetectionChange) onFaceDetectionChange(newFaceDetected);
 
-    if (newFaceDetected) {
-      const landmarks = results.multiFaceLandmarks[0].map(l => ({ x: l.x, y: l.y, z: l.z }));
+    if (newFaceDetected && drawConnectors && FACEMESH_TESSELATION) {
+      const landmarks = results.multiFaceLandmarks[0].map((l: any) => ({ x: l.x, y: l.y, z: l.z }));
       const smoothedLandmarks = smoothLandmarks(landmarks);
 
-      drawConnectors(ctx, smoothedLandmarks, FACEMESH_TESSELATION, { color: '#C0C0C070', lineWidth: 1 });
-
-      if (isAnalyzing) {
-        const faceShape = analyzeFaceShape(smoothedLandmarks, canvas.width, canvas.height);
-        const skinTone = analyzeSkinTone(ctx, smoothedLandmarks, canvas.width, canvas.height);
-        const skinType = analyzeSkinType(ctx, smoothedLandmarks, canvas.width, canvas.height);
-
-        setLocalDetectedTraits({
-          faceShape,
-          skinTone,
-          skinType,
-          features: [],
-          recommendations: [],
-        });
+      try {
+        drawConnectors(ctx, smoothedLandmarks, FACEMESH_TESSELATION, { color: '#C0C0C070', lineWidth: 1 });
+      } catch (error) {
+        console.warn('Failed to draw face mesh:', error);
       }
 
-      // Draw simplified overlay
+      if (isAnalyzing) {
+        try {
+          const faceShape = analyzeFaceShape(smoothedLandmarks, canvas.width, canvas.height);
+          const skinTone = analyzeSkinTone(ctx, smoothedLandmarks, canvas.width, canvas.height);
+          const skinType = analyzeSkinType(ctx, smoothedLandmarks, canvas.width, canvas.height);
+
+          setLocalDetectedTraits({
+            faceShape,
+            skinTone,
+            skinType,
+            features: [],
+            recommendations: [],
+          });
+        } catch (error) {
+          console.warn('Failed to analyze facial traits:', error);
+        }
+      }
+
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
       const radius = Math.min(canvas.width, canvas.height) * 0.2;
@@ -365,52 +378,82 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
     }
 
     ctx.restore();
-  }, [canvasRef, videoRef, isAnalyzing, onFaceDetectionChange, localDetectedTraits]);
+  }, [canvasRef, videoRef, isAnalyzing, onFaceDetectionChange]);
 
   useEffect(() => {
-    const faceMesh = new FaceMesh({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
-    });
+    if (!mediapipeAvailable || !FaceMesh) {
+      console.warn('MediaPipe FaceMesh is not available. Face detection will not work.');
+      return;
+    }
+    
+    try {
+      const faceMesh = new FaceMesh({
+        locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
+      });
 
-    faceMesh.setOptions({
-      maxNumFaces: 1,
-      refineLandmarks: true,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5,
-    });
+      faceMesh.setOptions({
+        maxNumFaces: 1,
+        refineLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      });
 
-    faceMesh.onResults(onResults);
-    faceMeshRef.current = faceMesh;
+      faceMesh.onResults(onResults);
+      faceMeshRef.current = faceMesh;
+    } catch (error) {
+      console.error('Failed to initialize FaceMesh:', error);
+      setMediapipeAvailable(false);
+    }
 
     return () => {
-      faceMesh.close();
+      if (faceMeshRef.current) {
+        try {
+          faceMeshRef.current.close();
+        } catch (error) {
+          console.warn('Error closing FaceMesh:', error);
+        }
+      }
     };
   }, [onResults]);
 
   useEffect(() => {
-    if (!videoRef.current || !cameraActive) return;
+    if (!videoRef.current || !cameraActive || !mediapipeAvailable || !Camera) return;
 
-    const camera = new Camera(videoRef.current, {
-      onFrame: async () => {
-        if (videoRef.current && faceMeshRef.current) {
-          await faceMeshRef.current.send({ image: videoRef.current });
-        }
-      },
-      width: 640,
-      height: 480,
-    });
+    try {
+      const camera = new Camera(videoRef.current, {
+        onFrame: async () => {
+          if (videoRef.current && faceMeshRef.current) {
+            try {
+              await faceMeshRef.current.send({ image: videoRef.current });
+            } catch (error) {
+              console.warn('Error sending frame to FaceMesh:', error);
+            }
+          }
+        },
+        width: 640,
+        height: 480,
+      });
 
-    camera.start();
-    cameraRef.current = camera;
+      camera.start();
+      cameraRef.current = camera;
+    } catch (error) {
+      console.error('Failed to initialize Camera:', error);
+    }
 
     return () => {
-      camera.stop();
+      if (cameraRef.current) {
+        try {
+          cameraRef.current.stop();
+        } catch (error) {
+          console.warn('Error stopping camera:', error);
+        }
+      }
     };
-  }, [cameraActive]);
+  }, [cameraActive, mediapipeAvailable]);
 
   const getCurrentMakeupStep = (): string => {
     const instruction = lookGuidance.getCurrentInstruction();
-    return instruction ? instruction.instruction : '';
+    return instruction ? (typeof instruction === 'string' ? instruction : instruction.instruction) : '';
   };
 
   const getSelectedLook = (): ReferenceLook | null => {
@@ -436,6 +479,18 @@ const FaceAnalysisCamera: React.FC<FaceAnalysisCameraProps> = ({
             ref={canvasRef}
             className="absolute inset-0 w-full h-full"
           />
+          {!mediapipeAvailable && cameraActive && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="bg-black/80 text-white p-4 rounded-lg max-w-md text-center">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+                <p className="text-lg font-semibold">Face detection is unavailable</p>
+                <p className="text-sm mt-2">
+                  MediaPipe libraries couldn't be loaded. Facial analysis features won't work, 
+                  but you can still capture images and use basic functionality.
+                </p>
+              </div>
+            </div>
+          )}
           {showGuidance && localFaceDetected && currentGuidance && (
             <div className="absolute bottom-4 left-4 right-4 bg-black/50 backdrop-blur-sm p-3 rounded-lg text-white">
               <div className="flex items-start space-x-2">
