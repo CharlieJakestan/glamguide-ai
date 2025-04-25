@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '@/components/Layout';
 import { useToast } from '@/hooks/use-toast';
@@ -9,15 +10,18 @@ import FaceAnalysisCamera from '@/components/makeup/FaceAnalysisCamera';
 import { getReferenceLooks } from '@/services/lookReferenceService';
 import { useReferenceLookGuidance } from '@/hooks/useReferenceLookGuidance';
 import { initFaceDetection } from '@/lib/faceDetection';
+import { init3DFaceModeling } from '@/lib/face3dModeling';
+import { initVoiceInteraction, startListening, processCommand } from '@/services/voiceInteractionService';
 import MakeupTips from '@/components/makeup/MakeupTips';
 import { useSetupStatus } from '@/hooks/useSetupStatus';
 import { useCamera } from '@/hooks/useCamera';
 import { useFaceDetection } from '@/hooks/useFaceDetection';
 import { useAnalysisSetup } from '@/hooks/useAnalysisSetup';
 import { useMakeupObjectDetection } from '@/hooks/useMakeupObjectDetection';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Mic, MicOff } from 'lucide-react';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { MovementData, DetectedObject } from '@/types/facial-analysis';
+import { Button } from '@/components/ui/button';
 
 const GanGenerator = () => {
   const { toast } = useToast();
@@ -69,10 +73,18 @@ const GanGenerator = () => {
     voiceEnabled,
     facialAnalysis: detectedFacialTraits
   });
+
+  // New state for 3D face modeling
+  const [face3dModelingReady, setFace3dModelingReady] = useState(false);
+  const [voiceInteractionReady, setVoiceInteractionReady] = useState(false);
+  const [isVoiceListening, setIsVoiceListening] = useState(false);
+  const [lastVoiceCommand, setLastVoiceCommand] = useState<string | null>(null);
   
+  // Initialize face detection
   useEffect(() => {
     const setupFaceDetection = async () => {
       try {
+        // Try to initialize face detection with fallbacks
         const success = await initFaceDetection();
         setFaceDetectionReady(success);
         
@@ -99,6 +111,76 @@ const GanGenerator = () => {
     setupFaceDetection();
   }, [toast, setFaceDetectionReady]);
   
+  // Initialize 3D face modeling
+  useEffect(() => {
+    const setup3DFaceModeling = async () => {
+      try {
+        const success = await init3DFaceModeling();
+        setFace3dModelingReady(success);
+        
+        if (!success) {
+          toast({
+            title: "3D Modeling Setup",
+            description: "Could not initialize 3D face modeling. Some advanced features will be limited.",
+            variant: "default"
+          });
+        } else {
+          console.log('3D face modeling initialized successfully');
+        }
+      } catch (error) {
+        console.error('Error setting up 3D face modeling:', error);
+        setFace3dModelingReady(false);
+      }
+    };
+    
+    setup3DFaceModeling();
+  }, [toast]);
+  
+  // Initialize voice interaction
+  useEffect(() => {
+    const setupVoiceInteraction = () => {
+      try {
+        const handleVoiceCommand = (command: string) => {
+          console.log('Voice command received:', command);
+          setLastVoiceCommand(command);
+          
+          // Process voice command
+          processCommand(command).then(response => {
+            console.log('AI response:', response);
+            
+            // Handle specific commands
+            if (command.includes('camera') && !cameraActive) {
+              toggleCamera();
+            } else if (command.includes('capture') && cameraActive) {
+              captureAndAnalyzeFace();
+            } else if (command.includes('look') && referenceLooks.length > 0) {
+              const randomLook = referenceLooks[Math.floor(Math.random() * referenceLooks.length)];
+              setSelectedLookId(randomLook.id);
+              lookGuidance.setSelectedLookId(randomLook.id);
+            }
+          });
+        };
+        
+        const success = initVoiceInteraction(handleVoiceCommand);
+        setVoiceInteractionReady(success);
+        
+        if (success) {
+          console.log('Voice interaction initialized successfully');
+          startListening();
+          setIsVoiceListening(true);
+        } else {
+          console.warn('Voice interaction initialization failed');
+        }
+      } catch (error) {
+        console.error('Error setting up voice interaction:', error);
+        setVoiceInteractionReady(false);
+      }
+    };
+    
+    setupVoiceInteraction();
+  }, [toggleCamera, cameraActive, referenceLooks]);
+  
+  // Load reference looks
   useEffect(() => {
     const looks = getReferenceLooks();
     setReferenceLooks(looks);
@@ -238,6 +320,16 @@ const GanGenerator = () => {
   
   const stepNames = lookGuidance.selectedLook?.steps.map(step => step.instruction) || [];
   
+  const toggleVoiceListening = () => {
+    if (isVoiceListening) {
+      stopListening();
+      setIsVoiceListening(false);
+    } else {
+      startListening();
+      setIsVoiceListening(true);
+    }
+  };
+  
   if (isLoading) {
     return (
       <Layout>
@@ -256,14 +348,37 @@ const GanGenerator = () => {
     <Layout>
       <div className="max-w-4xl mx-auto">
         <div className="bg-white p-6 rounded-xl shadow-lg">
-          <h2 className="text-2xl font-bold text-pink-500 mb-4">
-            AI Makeup Look Generator
-          </h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold text-pink-500">
+              AI Makeup Look Generator
+            </h2>
+            
+            {voiceInteractionReady && (
+              <Button 
+                variant={isVoiceListening ? "destructive" : "outline"}
+                size="sm"
+                onClick={toggleVoiceListening}
+                className="flex items-center gap-2"
+              >
+                {isVoiceListening ? <MicOff size={16} /> : <Mic size={16} />}
+                {isVoiceListening ? "Disable Voice" : "Enable Voice"} 
+              </Button>
+            )}
+          </div>
           
           <p className="mb-6 text-gray-600">
             Create unique makeup looks with our AI-powered generator! Each look is uniquely
             generated just for you based on advanced face analysis technology.
           </p>
+          
+          {lastVoiceCommand && (
+            <Alert variant="default" className="mb-4 bg-purple-50 border-purple-200">
+              <AlertTitle>Voice Command Detected</AlertTitle>
+              <AlertDescription>
+                "{lastVoiceCommand}"
+              </AlertDescription>
+            </Alert>
+          )}
           
           {!faceDetectionReady && (
             <Alert variant="default" className="mb-4">
@@ -271,6 +386,15 @@ const GanGenerator = () => {
               <AlertDescription>
                 Using simplified face detection mode. Some advanced features may be limited, 
                 but basic functionality will still work.
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          {!face3dModelingReady && (
+            <Alert variant="default" className="mb-4">
+              <AlertTitle>Limited 3D Face Modeling</AlertTitle>
+              <AlertDescription>
+                3D face modeling features are not available. Virtual makeup application will use 2D techniques instead.
               </AlertDescription>
             </Alert>
           )}
@@ -331,17 +455,19 @@ const GanGenerator = () => {
               videoRef={videoRef}
               canvasRef={canvasRef}
               faceDetected={faceDetected}
-              movementData={{
-                x: movementData?.headPose?.yaw || 0,
-                y: movementData?.headPose?.pitch || 0,
-                magnitude: movementData?.headPose?.roll || 0
-              }}
+              movementData={movementData ? {
+                x: movementData.headPose?.yaw || 0,
+                y: movementData.headPose?.pitch || 0,
+                magnitude: movementData.headPose?.roll || 0
+              } : { x: 0, y: 0, magnitude: 0 }}
               lastActivity={lastActivity}
               nearbyObjects={detectedObjects.map(obj => ({
                 type: obj.type,
                 position: { x: obj.confidence || 0, y: obj.confidence || 0 }
               }))}
               detectedMakeupTools={detectedMakeupTools}
+              modelingEnabled={face3dModelingReady}
+              voiceInteractionEnabled={voiceInteractionReady}
             />
           )}
           
