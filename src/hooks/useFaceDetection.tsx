@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { initFaceDetection, detectFaces, isModelsLoaded } from '@/lib/faceDetection';
+import { initFaceDetection, detectFaces, isModelsLoaded, FaceDetectionResult } from '@/lib/faceDetection';
 import * as faceapi from '@vladmandic/face-api';
 
 interface UseFaceDetectionProps {
@@ -247,36 +247,19 @@ export const useFaceDetection = ({
           (current.detection.score > prev.detection.score) ? current : prev
         );
         
-        const { detection, landmarks: faceLandmarks, expressions: faceExpressions } = bestDetection;
-        const { box } = detection;
+        setFaceDetected(true);
+        setFacePosition({
+          x: bestDetection.detection.box.x,
+          y: bestDetection.detection.box.y,
+          width: bestDetection.detection.box.width,
+          height: bestDetection.detection.box.height
+        });
         
-        const videoWidth = videoRef.current.videoWidth;
-        const videoHeight = videoRef.current.videoHeight;
+        setDetectionConfidence(bestDetection.detection.score);
+        setLandmarks(bestDetection.landmarks);
         
-        const normalizedPosition = {
-          x: (box.x / videoWidth) * 100,
-          y: (box.y / videoHeight) * 100,
-          width: (box.width / videoWidth) * 100,
-          height: (box.height / videoHeight) * 100
-        };
-        
-        const confidence = detection.score;
-        
-        setFacePosition(normalizedPosition);
-        setDetectionConfidence(confidence);
-        setLandmarks(faceLandmarks);
-        setExpressions(faceExpressions);
-        
-        if (!faceDetected) {
-          setFaceDetected(true);
-          if (onFaceDetected) {
-            onFaceDetected(bestDetection);
-          }
-          
-          if (faceLostTimeoutRef.current) {
-            window.clearTimeout(faceLostTimeoutRef.current);
-            faceLostTimeoutRef.current = null;
-          }
+        if (bestDetection.expressions) {
+          setExpressions(bestDetection.expressions);
         }
         
         const currentMovementData = calculateMovementData(bestDetection);
@@ -285,23 +268,25 @@ export const useFaceDetection = ({
         const activity = detectActivity(
           currentMovementData,
           lastFacePositionRef.current,
-          faceExpressions
+          bestDetection.expressions
         );
         
         if (activity) {
           setLastActivity(activity);
-          lastActivityTimeRef.current = now;
-        } else if (now - lastActivityTimeRef.current > 10000) {
-          setLastActivity(null);
+          lastActivityTimeRef.current = Date.now();
         }
         
         lastFacePositionRef.current = currentMovementData;
+        
+        if (faceLostTimeoutRef.current) {
+          window.clearTimeout(faceLostTimeoutRef.current);
+          faceLostTimeoutRef.current = null;
+        }
       } else {
         if (faceDetected && !faceLostTimeoutRef.current) {
           faceLostTimeoutRef.current = window.setTimeout(() => {
             setFaceDetected(false);
             setFacePosition(null);
-            setDetectionConfidence(0);
             if (onFaceLost) {
               onFaceLost();
             }
@@ -311,10 +296,11 @@ export const useFaceDetection = ({
       }
     } catch (error) {
       console.error('Error in face detection:', error);
+    } finally {
+      detectionIntervalRef.current = window.setTimeout(runFaceDetection, detectionInterval);
     }
-    
-    detectionIntervalRef.current = window.setTimeout(runFaceDetection, detectionInterval);
-  }, [videoRef, faceDetectionReady, enabled, detectionInterval, faceDetected, onFaceDetected, onFaceLost, calculateMovementData, detectActivity]);
+  }, [videoRef, faceDetectionReady, enabled, detectionInterval, faceDetected, 
+      calculateMovementData, detectActivity, onFaceLost]);
 
   useEffect(() => {
     if (enabled && faceDetectionReady) {

@@ -184,24 +184,26 @@ export const useMakeupGuidance = ({
       
       // Generate guidance
       const availableProductNames = availableProducts.map(p => p.name);
-      const guidance = generateNextStepGuidance(
+      const guidance = await generateNextStepGuidance(
         analysis,
         currentLook.name || 'default',
         region,
         availableProductNames
       );
       
-      setCurrentGuidance(guidance);
+      if (guidance) {
+        setCurrentGuidance(guidance);
       
-      // Queue voice guidance if enabled
-      if (voiceEnabled && guidance) {
-        analysisPaused.current = true;
-        queueVoiceInstruction(guidance.voiceInstruction);
-        
-        // Allow next analysis after a short delay
-        setTimeout(() => {
-          analysisPaused.current = false;
-        }, 5000);
+        // Queue voice guidance if enabled
+        if (voiceEnabled && guidance.voiceInstruction) {
+          analysisPaused.current = true;
+          queueVoiceInstruction(guidance.voiceInstruction);
+          
+          // Allow next analysis after a short delay
+          setTimeout(() => {
+            analysisPaused.current = false;
+          }, 5000);
+        }
       }
       
       // Send feedback to improve AI

@@ -279,7 +279,8 @@ const GanGeneratorAdvanced = () => {
                 goToNextStep: lookGuidance.goToNextStep,
                 goToPreviousStep: lookGuidance.goToPreviousStep,
                 markCompleted: lookGuidance.markCurrentStepCompleted,
-                selectStep: lookGuidance.selectStep
+                selectStep: lookGuidance.selectStep,
+                handleCustomInstructionChange
               }}
               onCaptureAndAnalyze={captureAndAnalyzeFace}
               onToggleCamera={toggleCamera}

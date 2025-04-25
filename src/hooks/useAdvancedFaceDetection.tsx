@@ -1,5 +1,6 @@
+
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { detectFaces } from '@/lib/faceDetection';
+import { detectFaces, FaceDetectionResult } from '@/lib/faceDetection';
 import * as faceapi from '@vladmandic/face-api';
 import { FacialAttributes, MovementData, DetectedAction, MakeupRegion, DetectedObject } from '@/types/facial-analysis';
 
@@ -506,19 +507,19 @@ export const useAdvancedFaceDetection = ({
           (current.detection.score > prev.detection.score) ? current : prev
         );
         
-        const { detection, landmarks: faceLandmarks, expressions: faceExpressions } = bestDetection;
+        const { detection, landmarks, expressions } = bestDetection;
         const confidence = detection.score;
         
         setFaceDetected(true);
         setDetectionConfidence(confidence);
-        setFaceLandmarks(faceLandmarks);
+        setFaceLandmarks(landmarks);
         
         // Calculate movement data
         const currentMovementData = calculateMovementData(bestDetection);
         setMovementData(currentMovementData);
         
         // Detect makeup regions
-        const regions = detectMakeupRegions(faceLandmarks);
+        const regions = detectMakeupRegions(landmarks);
         setMakeupRegions(regions);
         
         // Apply virtual makeup if enabled
