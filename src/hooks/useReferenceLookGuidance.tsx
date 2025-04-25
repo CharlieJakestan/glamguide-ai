@@ -138,10 +138,15 @@ export const useReferenceLookGuidance = ({
   };
   
   // Get current step details
-  const getCurrentStepInstruction = () => {
-    if (!selectedLook || customizedSteps.length === 0) return null;
+  const getCurrentStepInstruction = (): string => {
+    if (!selectedLook || customizedSteps.length === 0) return '';
     
-    return customizedSteps[currentStep];
+    const step = customizedSteps[currentStep];
+    let instruction = `Step ${currentStep + 1}: ${step.instruction}`;
+    if (step.customization) {
+      instruction += `. ${step.customization}`;
+    }
+    return instruction;
   };
   
   return {

@@ -1,8 +1,7 @@
-
 import { supabase } from '@/lib/supabase';
 import { generateSpeech } from './voiceGuidanceService';
+import { enhanceMakeupGuidanceWithKnowledge } from './makeupKnowledgeService';
 
-// Define makeup style characteristics by region
 const REGIONAL_STYLES = {
   'usa': {
     'natural': 'Focuses on enhancing features with neutral tones, defined but natural-looking brows, and subtle contouring.',
@@ -26,7 +25,6 @@ const REGIONAL_STYLES = {
   }
 };
 
-// Product substitution recommendations
 const PRODUCT_SUBSTITUTIONS = {
   'foundation': ['tinted moisturizer', 'bb cream', 'cc cream', 'concealer'],
   'lipstick': ['lip tint', 'lip gloss', 'lip crayon', 'lip liner'],
@@ -52,6 +50,11 @@ export interface FaceAnalysisResult {
   nextStep?: string;
   feedback: string[];
   detectedTools?: string[];
+  facialTraits?: {
+    skinTone?: string;
+    faceShape?: string;
+    features?: string[];
+  };
 }
 
 export interface MakeupGuidance {
@@ -65,7 +68,6 @@ export interface MakeupGuidance {
   }
 }
 
-// Improved analysis function with AI detection integration
 export const analyzeFaceMakeup = async (
   imageData: ImageData | string, 
   targetLook: string,
@@ -73,10 +75,8 @@ export const analyzeFaceMakeup = async (
   currentStep: number,
   detectedTools: string[] = []
 ): Promise<FaceAnalysisResult> => {
-  // Simulate processing delay
   await new Promise(resolve => setTimeout(resolve, 300));
   
-  // Enhanced mock analysis using detected tools
   const mockAnalysis: FaceAnalysisResult = {
     regions: {
       'eyes': {
@@ -106,12 +106,10 @@ export const analyzeFaceMakeup = async (
     detectedTools
   };
   
-  // Adjust analysis based on detected tools
   if (detectedTools.length > 0) {
     detectedTools.forEach(tool => {
       const toolLower = tool.toLowerCase();
       
-      // Update regions based on detected tools
       if (toolLower.includes('eye') || toolLower.includes('mascara') || toolLower.includes('liner')) {
         mockAnalysis.regions.eyes.coverage += 0.1;
         mockAnalysis.regions.eyes.blending += 0.1;
@@ -122,7 +120,6 @@ export const analyzeFaceMakeup = async (
         mockAnalysis.regions.cheeks.coverage += 0.15;
         mockAnalysis.regions.cheeks.blending += 0.1;
       } else if (toolLower.includes('foundation') || toolLower.includes('concealer')) {
-        // Improve all regions slightly with foundation
         Object.values(mockAnalysis.regions).forEach(region => {
           region.colorMatch = true;
           region.blending += 0.05;
@@ -131,14 +128,12 @@ export const analyzeFaceMakeup = async (
     });
   }
   
-  // Ensure values stay in valid range
   Object.values(mockAnalysis.regions).forEach(region => {
     region.coverage = Math.min(region.coverage, 1);
     region.intensity = Math.min(region.intensity, 1);
     region.blending = Math.min(region.blending, 1);
   });
   
-  // Generate feedback based on analysis
   Object.entries(mockAnalysis.regions).forEach(([region, analysis]) => {
     if (analysis.coverage < 0.4) {
       mockAnalysis.feedback.push(`Apply more product to the ${region} area`);
@@ -157,7 +152,6 @@ export const analyzeFaceMakeup = async (
     }
   });
   
-  // Add technique tips based on regional style
   if (REGIONAL_STYLES[region]) {
     mockAnalysis.feedback.push(`Tip: ${REGIONAL_STYLES[region].technique}`);
   }
@@ -165,13 +159,12 @@ export const analyzeFaceMakeup = async (
   return mockAnalysis;
 };
 
-export const generateNextStepGuidance = (
+export const generateNextStepGuidance = async (
   analysis: FaceAnalysisResult,
   targetLook: string,
   region: 'usa' | 'korean' | 'indian' | 'european',
   availableProducts: string[]
-): MakeupGuidance => {
-  // Determine the next area to focus on based on analysis
+): Promise<MakeupGuidance> => {
   let lowestProgressRegion = '';
   let lowestProgress = 1;
   
@@ -183,25 +176,32 @@ export const generateNextStepGuidance = (
     }
   });
   
-  // If all regions are progressing well, focus on overall improvement
   if (lowestProgress > 0.7 || !lowestProgressRegion) {
-    const overallGuidance: MakeupGuidance = {
+    let overallGuidance: MakeupGuidance = {
       instruction: "Your makeup application is progressing well! Focus on final touches and blending for a seamless finish.",
       voiceInstruction: "Your makeup is looking good! Now focus on blending all areas for a seamless finish."
     };
     
-    // Generate speech from this guidance
+    try {
+      overallGuidance.instruction = await enhanceMakeupGuidanceWithKnowledge(
+        overallGuidance.instruction
+      );
+      overallGuidance.voiceInstruction = await enhanceMakeupGuidanceWithKnowledge(
+        overallGuidance.voiceInstruction
+      );
+    } catch (error) {
+      console.error('Error enhancing guidance with knowledge:', error);
+    }
+    
     generateSpeech(overallGuidance.voiceInstruction);
     
     return overallGuidance;
   }
   
-  // Generate region-specific guidance
   const regionAnalysis = analysis.regions[lowestProgressRegion];
   let instruction = '';
   let voiceInstruction = '';
   
-  // Specific guidance based on the region and its analysis
   if (regionAnalysis.coverage < 0.5) {
     instruction = `Apply more product to the ${lowestProgressRegion} area. `;
     voiceInstruction = `Please apply more product to your ${lowestProgressRegion}. `;
@@ -213,13 +213,11 @@ export const generateNextStepGuidance = (
     voiceInstruction = `The placement of your ${lowestProgressRegion} makeup is ${regionAnalysis.placement}. Please adjust it. `;
   }
   
-  // Add regional technique tip
   if (REGIONAL_STYLES[region]) {
     instruction += `Remember: ${REGIONAL_STYLES[region].technique}`;
     voiceInstruction += `Remember, for ${region} style makeup: ${REGIONAL_STYLES[region].technique}`;
   }
   
-  // Include personalized guidance based on detected tools
   if (analysis.detectedTools && analysis.detectedTools.length > 0) {
     const tools = analysis.detectedTools;
     
@@ -231,7 +229,22 @@ export const generateNextStepGuidance = (
     }
   }
   
-  // Generate speech from this guidance
+  try {
+    instruction = await enhanceMakeupGuidanceWithKnowledge(
+      instruction,
+      analysis.facialTraits,
+      lowestProgressRegion
+    );
+    
+    voiceInstruction = await enhanceMakeupGuidanceWithKnowledge(
+      voiceInstruction,
+      analysis.facialTraits,
+      lowestProgressRegion
+    );
+  } catch (error) {
+    console.error('Error enhancing guidance with knowledge:', error);
+  }
+  
   generateSpeech(voiceInstruction);
   
   return {
@@ -239,7 +252,7 @@ export const generateNextStepGuidance = (
     voiceInstruction,
     regionOfFocus: lowestProgressRegion,
     visualGuide: {
-      x: Math.random() * 100,  // These would be actual coordinates in a real implementation
+      x: Math.random() * 100,
       y: Math.random() * 100,
       radius: 20
     }
@@ -259,7 +272,6 @@ export const suggestProductSubstitutions = (
     );
     
     if (productType && PRODUCT_SUBSTITUTIONS[productType]) {
-      // Filter substitutions to only recommend products the user has
       const possibleSubstitutes = PRODUCT_SUBSTITUTIONS[productType].filter(
         substitute => availableProducts.some(p => p.toLowerCase().includes(substitute.toLowerCase()))
       );
@@ -273,7 +285,6 @@ export const suggestProductSubstitutions = (
   return substitutions;
 };
 
-// Function to send feedback to backend for improving the AI
 export const sendFeedbackToAI = async (
   lookId: string,
   feedback: string,
@@ -287,7 +298,6 @@ export const sendFeedbackToAI = async (
       return false;
     }
     
-    // Check if a user_look entry exists for this look
     const { data: existingLook } = await supabase
       .from('user_looks')
       .select('id, custom_settings')
@@ -296,7 +306,6 @@ export const sendFeedbackToAI = async (
       .maybeSingle();
     
     if (existingLook) {
-      // Update existing entry
       const customSettings = existingLook.custom_settings as Record<string, any> || {};
       const existingFeedback = Array.isArray(customSettings.feedback) ? customSettings.feedback : [];
       
@@ -319,7 +328,6 @@ export const sendFeedbackToAI = async (
       
       if (error) throw error;
     } else {
-      // Create new entry
       const { error } = await supabase
         .from('user_looks')
         .insert({

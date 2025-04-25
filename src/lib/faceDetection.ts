@@ -69,7 +69,7 @@ export const detectFaces = async (
   video: HTMLVideoElement | null,
   onFaceDetected?: (detected: boolean) => void,
   onFacePosition?: (position: { x: number; y: number; width: number; height: number }) => void
-): Promise<faceapi.WithFaceLandmarks<faceapi.WithFaceDetection<{}>, faceapi.FaceLandmarks68>[] | undefined> => {
+): Promise<faceapi.WithFaceLandmarks<{ detection: faceapi.FaceDetection }, faceapi.FaceLandmarks68>[] | undefined> => {
   if (!video || !modelsLoaded) {
     if (onFaceDetected) onFaceDetected(false);
     return undefined;
@@ -78,8 +78,7 @@ export const detectFaces = async (
   try {
     const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
     const results = await faceapi.detectAllFaces(video, options)
-      .withFaceLandmarks()
-      .withFaceExpressions();
+      .withFaceLandmarks();
 
     if (results && results.length > 0) {
       if (onFaceDetected) onFaceDetected(true);
