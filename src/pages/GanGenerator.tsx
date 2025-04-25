@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '@/components/Layout';
 import { useToast } from '@/hooks/use-toast';
@@ -267,7 +266,7 @@ const GanGenerator = () => {
           </p>
           
           {!faceDetectionReady && (
-            <Alert variant="warning" className="mb-4">
+            <Alert variant="default" className="mb-4">
               <AlertTitle>Limited Face Detection</AlertTitle>
               <AlertDescription>
                 Using simplified face detection mode. Some advanced features may be limited, 

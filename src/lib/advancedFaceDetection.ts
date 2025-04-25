@@ -117,10 +117,15 @@ export const setupAdvancedCamera = (
               }
             }
           }
+          
+          // Fixed: Return the detection to satisfy the Promise chain type requirements
+          return detection;
         })
         .catch(err => {
           console.error('Error in fallback face detection:', err);
           onFaceDetected(false);
+          // Return null to satisfy the Promise chain type requirements
+          return null;
         });
     }, 100);
     
