@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '@/components/Layout';
 import { useToast } from '@/hooks/use-toast';
@@ -74,17 +73,14 @@ const GanGenerator = () => {
     facialAnalysis: detectedFacialTraits
   });
 
-  // New state for 3D face modeling
   const [face3dModelingReady, setFace3dModelingReady] = useState(false);
   const [voiceInteractionReady, setVoiceInteractionReady] = useState(false);
   const [isVoiceListening, setIsVoiceListening] = useState(false);
   const [lastVoiceCommand, setLastVoiceCommand] = useState<string | null>(null);
   
-  // Initialize face detection
   useEffect(() => {
     const setupFaceDetection = async () => {
       try {
-        // Try to initialize face detection with fallbacks
         const success = await initFaceDetection();
         setFaceDetectionReady(success);
         
@@ -111,7 +107,6 @@ const GanGenerator = () => {
     setupFaceDetection();
   }, [toast, setFaceDetectionReady]);
   
-  // Initialize 3D face modeling
   useEffect(() => {
     const setup3DFaceModeling = async () => {
       try {
@@ -136,7 +131,6 @@ const GanGenerator = () => {
     setup3DFaceModeling();
   }, [toast]);
   
-  // Initialize voice interaction
   useEffect(() => {
     const setupVoiceInteraction = () => {
       try {
@@ -144,11 +138,9 @@ const GanGenerator = () => {
           console.log('Voice command received:', command);
           setLastVoiceCommand(command);
           
-          // Process voice command
           processCommand(command).then(response => {
             console.log('AI response:', response);
             
-            // Handle specific commands
             if (command.includes('camera') && !cameraActive) {
               toggleCamera();
             } else if (command.includes('capture') && cameraActive) {
@@ -180,7 +172,6 @@ const GanGenerator = () => {
     setupVoiceInteraction();
   }, [toggleCamera, cameraActive, referenceLooks]);
   
-  // Load reference looks
   useEffect(() => {
     const looks = getReferenceLooks();
     setReferenceLooks(looks);

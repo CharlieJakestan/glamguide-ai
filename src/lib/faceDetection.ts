@@ -67,25 +67,25 @@ export const initFaceDetection = async (): Promise<boolean> => {
 
 export const detectFaces = async (
   video: HTMLVideoElement | null,
-  onFaceDetected: (detected: boolean) => void,
+  onFaceDetected?: (detected: boolean) => void,
   onFacePosition?: (position: { x: number; y: number; width: number; height: number }) => void
-): Promise<void> => {
+): Promise<faceapi.WithFaceLandmarks<faceapi.WithFaceDetection<{}>, faceapi.FaceLandmarks68>[] | undefined> => {
   if (!video || !modelsLoaded) {
-    onFaceDetected(false);
-    return;
+    if (onFaceDetected) onFaceDetected(false);
+    return undefined;
   }
   
   try {
     const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
-    const result = await faceapi.detectSingleFace(video, options)
+    const results = await faceapi.detectAllFaces(video, options)
       .withFaceLandmarks()
       .withFaceExpressions();
-      
-    if (result) {
-      onFaceDetected(true);
+
+    if (results && results.length > 0) {
+      if (onFaceDetected) onFaceDetected(true);
       
       if (onFacePosition) {
-        const { box } = result.detection;
+        const { box } = results[0].detection;
         onFacePosition({
           x: box.x,
           y: box.y,
@@ -94,10 +94,13 @@ export const detectFaces = async (
         });
       }
     } else {
-      onFaceDetected(false);
+      if (onFaceDetected) onFaceDetected(false);
     }
+    
+    return results;
   } catch (error) {
     console.error('Error detecting faces:', error);
-    onFaceDetected(false);
+    if (onFaceDetected) onFaceDetected(false);
+    return undefined;
   }
 };

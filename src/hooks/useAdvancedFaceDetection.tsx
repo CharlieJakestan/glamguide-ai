@@ -490,7 +490,15 @@ export const useAdvancedFaceDetection = ({
       }
       
       // Detect faces
-      const detections = await detectFaces(videoRef.current);
+      const detections = await detectFaces(
+        videoRef.current,
+        (detected) => {
+          // This callback is handled separately below
+        },
+        (position) => {
+          // This callback is handled separately below
+        }
+      );
       
       if (detections && detections.length > 0) {
         // Take the detection with highest confidence if multiple faces are detected

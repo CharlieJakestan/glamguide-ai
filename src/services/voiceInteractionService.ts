@@ -127,7 +127,7 @@ export const processCommand = async (command: string): Promise<string> => {
     // Process command to determine intent
     const { command: intent, params } = processVoiceCommand(command);
     
-    let response;
+    let response = "I didn't understand that command";
     
     switch (intent) {
       case 'open_camera':
@@ -140,41 +140,22 @@ export const processCommand = async (command: string): Promise<string> => {
         if (params.product) {
           response = `Applying ${params.product} to your face`;
         } else {
-          response = "What makeup product would you like to apply?";
+          response = "What makeup would you like to apply?";
         }
         break;
-      case 'generate_look':
-        response = "Generating a new makeup look for you";
+      case 'next_step':
+        response = "Moving to the next step";
         break;
-      case 'help':
-        response = "I can help you capture photos, apply virtual makeup, or generate new makeup looks. What would you like to do?";
+      case 'previous_step':
+        response = "Going back to the previous step";
         break;
       default:
-        response = "I didn't understand that. Could you try again?";
+        response = "I'll help you with that";
     }
-    
-    // Generate speech from response
-    await generateSpeech(response, 'Charlie', true);
     
     return response;
   } catch (error) {
     console.error('Error processing command:', error);
-    return "Sorry, I encountered an error processing your request";
+    return "Sorry, I couldn't process that request";
   }
-};
-
-// Set custom wake phrases
-export const setWakePhrases = (phrases: string[]): void => {
-  if (phrases && phrases.length > 0) {
-    wakePhrases = phrases.map(phrase => phrase.toLowerCase());
-    console.log('Wake phrases updated:', wakePhrases);
-  }
-};
-
-export default {
-  initVoiceInteraction,
-  startListening,
-  stopListening,
-  processCommand,
-  setWakePhrases
 };
