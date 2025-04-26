@@ -14,6 +14,10 @@ import MakeupTips from '@/components/makeup/MakeupTips';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
+// Define type for status to match SetupStatusPanel props
+type ComponentStatusType = 'checking' | 'ready' | 'error';
+type SetupStatusType = 'not_started' | 'in_progress' | 'completed';
+
 const GanGenerator = () => {
   const { toast } = useToast();
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -30,10 +34,10 @@ const GanGenerator = () => {
   const [currentLook, setCurrentLook] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   
-  // Added for SetupStatusPanel props
-  const [modelStatus, setModelStatus] = useState('checking');
-  const [edgeFunctionStatus, setEdgeFunctionStatus] = useState('checking');
-  const [setupStatus, setSetupStatus] = useState('in_progress');
+  // Updated type definitions to match SetupStatusPanel props
+  const [modelStatus, setModelStatus] = useState<ComponentStatusType>('checking');
+  const [edgeFunctionStatus, setEdgeFunctionStatus] = useState<ComponentStatusType>('checking');
+  const [setupStatus, setSetupStatus] = useState<SetupStatusType>('in_progress');
   const [isLoading, setIsLoading] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -43,7 +47,7 @@ const GanGenerator = () => {
     voiceEnabled: isVoiceGuideEnabled,
     facialAnalysis: detectedFacialTraits
   });
-  
+
   // Define checkStatus function for SetupStatusPanel
   const checkStatus = () => {
     setIsLoading(true);
@@ -54,6 +58,11 @@ const GanGenerator = () => {
       setSetupStatus('completed');
       setIsLoading(false);
     }, 1500);
+  };
+  
+  // Toggle camera status
+  const toggleCamera = () => {
+    setIsCameraActive(!isCameraActive);
   };
 
   // Capture and analyze face - moved up before it's used
@@ -148,11 +157,6 @@ const GanGenerator = () => {
     } finally {
       setIsAnalyzing(false);
     }
-  };
-
-  // Toggle camera status
-  const toggleCamera = () => {
-    setIsCameraActive(!isCameraActive);
   };
 
   // Handle voice command
