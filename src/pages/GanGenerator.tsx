@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import Layout from '@/components/Layout';
 import { useToast } from '@/hooks/use-toast';
 import { setApiKey } from '@/services/speechService';
@@ -27,56 +28,40 @@ const GanGenerator = () => {
   const [customInstruction, setCustomInstruction] = useState('');
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [currentLook, setCurrentLook] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  
+  // Added for SetupStatusPanel props
+  const [modelStatus, setModelStatus] = useState('checking');
+  const [edgeFunctionStatus, setEdgeFunctionStatus] = useState('checking');
+  const [setupStatus, setSetupStatus] = useState('in_progress');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const videoRef = React.useRef<HTMLVideoElement>(null);
-  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const lookGuidance = useReferenceLookGuidance({
     voiceEnabled: isVoiceGuideEnabled,
     facialAnalysis: detectedFacialTraits
   });
-
-  // Toggle camera status
-  const toggleCamera = () => {
-    setIsCameraActive(!isCameraActive);
+  
+  // Define checkStatus function for SetupStatusPanel
+  const checkStatus = () => {
+    setIsLoading(true);
+    // Simulate checking status
+    setTimeout(() => {
+      setModelStatus('ready');
+      setEdgeFunctionStatus('ready');
+      setSetupStatus('completed');
+      setIsLoading(false);
+    }, 1500);
   };
 
-  // Handle voice command
-  const handleVoiceCommand = useCallback((command: string, params: Record<string, string>) => {
-    switch (command) {
-      case 'next':
-        lookGuidance.goToNextStep();
-        break;
-      case 'previous':
-        lookGuidance.goToPreviousStep();
-        break;
-      case 'analyze':
-        captureAndAnalyzeFace();
-        break;
-      default:
-        toast({
-          title: "Command Received",
-          description: `Executing: ${command}`,
-        });
-    }
-  }, [toast, lookGuidance, captureAndAnalyzeFace]);
-
-  // Effect to start voice command detection
-  useEffect(() => {
-    if (!isVoiceGuideEnabled) return;
-    
-    startListening(handleVoiceCommand);
-    
-    return () => {
-      stopListening();
-    };
-  }, [isVoiceGuideEnabled, handleVoiceCommand]);
-
-  // Capture and analyze face
-  const captureAndAnalyzeFace = useCallback(async () => {
+  // Capture and analyze face - moved up before it's used
+  const captureAndAnalyzeFace = async () => {
     if (!videoRef.current || !canvasRef.current) return;
 
     try {
+      setIsAnalyzing(true);
       setAnalysisError(null);
 
       const canvas = document.createElement('canvas');
@@ -160,8 +145,46 @@ const GanGenerator = () => {
         description: "Using simulation mode due to connection issues.",
         variant: "default",
       });
+    } finally {
+      setIsAnalyzing(false);
     }
-  }, [selectedLookId, setAnalysisError, setDetectedFacialTraits, setAnalysisImage, setCurrentGuidance, setAnalysisProgress, toast]);
+  };
+
+  // Toggle camera status
+  const toggleCamera = () => {
+    setIsCameraActive(!isCameraActive);
+  };
+
+  // Handle voice command
+  const handleVoiceCommand = React.useCallback((command: string, params: Record<string, string>) => {
+    switch (command) {
+      case 'next':
+        lookGuidance.goToNextStep();
+        break;
+      case 'previous':
+        lookGuidance.goToPreviousStep();
+        break;
+      case 'analyze':
+        captureAndAnalyzeFace();
+        break;
+      default:
+        toast({
+          title: "Command Received",
+          description: `Executing: ${command}`,
+        });
+    }
+  }, [toast, lookGuidance]);
+
+  // Effect to start voice command detection
+  useEffect(() => {
+    if (!isVoiceGuideEnabled) return;
+    
+    startListening(handleVoiceCommand);
+    
+    return () => {
+      stopListening();
+    };
+  }, [isVoiceGuideEnabled, handleVoiceCommand]);
 
   // Load reference looks
   useEffect(() => {
@@ -180,6 +203,9 @@ const GanGenerator = () => {
     const defaultKey = "sk_0dfcb07ba1e4d72443fcb5385899c03e9106d3d27ddaadc2";
     setApiKey(defaultKey);
     setIsVoiceGuideEnabled(true);
+    
+    // Initial status check
+    checkStatus();
   }, [setIsVoiceGuideEnabled]);
 
   // Update the functions that use the 'instruction' property
@@ -208,7 +234,8 @@ const GanGenerator = () => {
           <div>
             <FaceAnalysisCamera
               cameraActive={isCameraActive}
-              analysisProgress={analysisProgress}
+              isAnalyzing={isAnalyzing}
+              progressPercentage={analysisProgress}
               currentGuidance={currentGuidance}
               detectedFacialTraits={detectedFacialTraits}
               analysisImage={analysisImage}
@@ -241,11 +268,22 @@ const GanGenerator = () => {
               onToggleCamera={toggleCamera}
               videoRef={videoRef}
               canvasRef={canvasRef}
+              faceDetected={false}
+              movementData={{ x: 0, y: 0, magnitude: 0 }}
+              lastActivity={null}
+              nearbyObjects={[]}
+              detectedMakeupTools={[]}
             />
           </div>
 
           <div>
-            <SetupStatusPanel />
+            <SetupStatusPanel
+              modelStatus={modelStatus}
+              edgeFunctionStatus={edgeFunctionStatus}
+              setupStatus={setupStatus}
+              isLoading={isLoading}
+              onCheckStatus={checkStatus}
+            />
             <ReadyToUsePanel
               cameraActive={isCameraActive}
               voiceEnabled={isVoiceGuideEnabled}

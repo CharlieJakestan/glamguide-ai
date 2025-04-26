@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '@/components/Layout';
 import { useToast } from '@/hooks/use-toast';
@@ -190,6 +191,13 @@ const GanGeneratorAdvanced = () => {
   
   const stepNames = lookGuidance.selectedLook?.steps.map(step => step.instruction) || [];
   
+  // Handle custom instruction change
+  const handleCustomInstructionChange = (value: string) => {
+    // Implementation of custom instruction change
+    console.log("Custom instruction changed to:", value);
+    // Would update step instructions in a real implementation
+  };
+  
   if (isLoading && !faceDetectionReady) {
     return (
       <Layout>
@@ -274,13 +282,12 @@ const GanGeneratorAdvanced = () => {
                 stepNames,
                 getCurrentInstruction: () => {
                   const instruction = lookGuidance.getCurrentStepInstruction();
-                  return typeof instruction === 'string' ? instruction : instruction.instruction;
+                  return typeof instruction === 'string' ? instruction : String(instruction);
                 },
                 goToNextStep: lookGuidance.goToNextStep,
                 goToPreviousStep: lookGuidance.goToPreviousStep,
                 markCompleted: lookGuidance.markCurrentStepCompleted,
-                selectStep: lookGuidance.selectStep,
-                handleCustomInstructionChange
+                selectStep: lookGuidance.selectStep
               }}
               onCaptureAndAnalyze={captureAndAnalyzeFace}
               onToggleCamera={toggleCamera}

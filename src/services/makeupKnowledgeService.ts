@@ -1,5 +1,5 @@
 
-import { supabase } from '@/lib/supabase';
+// Basic makeup knowledge service with mocked data
 
 export interface MakeupKnowledgeEntry {
   id: string;
@@ -11,15 +11,12 @@ export interface MakeupKnowledgeEntry {
   created_at: string;
 }
 
-// This is a mock function that simulates fetching from the makeup_knowledge table
-// since the actual table doesn't exist in the database types yet
+// This is a mock function that simulates fetching from a makeup_knowledge table
 export async function fetchMakeupKnowledge(category?: string): Promise<MakeupKnowledgeEntry[]> {
   try {
-    // Check if we're in development mode without the actual table
-    // In production, this would be replaced with a real query
     console.log('Fetching makeup knowledge', category);
     
-    // Return mock data that matches the MakeupKnowledgeEntry interface
+    // Mocked data that matches the MakeupKnowledgeEntry interface
     const mockData: MakeupKnowledgeEntry[] = [
       {
         id: '1',
@@ -64,7 +61,7 @@ export async function getKnowledgeForFacialTraits(traits: {
   features?: string[];
 }): Promise<Record<string, string[]>> {
   try {
-    // Mock implementation until the database table is created
+    // Mock implementation
     const recommendations: Record<string, string[]> = {
       foundation: [],
       eyeshadow: [],

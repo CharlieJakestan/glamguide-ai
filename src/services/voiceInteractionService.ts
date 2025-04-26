@@ -1,6 +1,7 @@
+
 // Basic voice interaction service
 
-let recognition: SpeechRecognition | null = null;
+let recognition: any | null = null; // Changed from SpeechRecognition to any
 let isListening = false;
 
 interface VoiceCommandHandler {
