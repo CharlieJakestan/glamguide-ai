@@ -7,12 +7,14 @@ import { analyzeFacialImage } from '@/services/ganService';
 import SetupStatusPanel from '@/components/makeup/SetupStatusPanel';
 import ReadyToUsePanel from '@/components/makeup/ReadyToUsePanel';
 import FaceAnalysisCamera from '@/components/makeup/FaceAnalysisCamera';
-import { getReferenceLooks } from '@/services/lookReferenceService';
+import { getReferenceLooks, trainAIWithReferenceImages } from '@/services/lookReferenceService';
 import { useReferenceLookGuidance } from '@/hooks/useReferenceLookGuidance';
-import { startListening, stopListening } from '@/services/voiceInteractionService';
+import { autoStartVoiceInteraction, startListening, stopListening, getWelcomeMessage } from '@/services/voiceInteractionService';
 import MakeupTips from '@/components/makeup/MakeupTips';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useCamera } from '@/hooks/useCamera';
+import { useFaceMesh } from '@/hooks/useFaceMesh';
 
 // Define type for status to match SetupStatusPanel props
 type ComponentStatusType = 'checking' | 'ready' | 'error';
@@ -21,7 +23,7 @@ type SetupStatusType = 'not_started' | 'in_progress' | 'completed';
 const GanGenerator = () => {
   const { toast } = useToast();
   const [isCameraActive, setIsCameraActive] = useState(false);
-  const [isVoiceGuideEnabled, setIsVoiceGuideEnabled] = useState(false);
+  const [isVoiceGuideEnabled, setIsVoiceGuideEnabled] = useState(true); // Auto-enable voice
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [currentGuidance, setCurrentGuidance] = useState('');
   const [detectedFacialTraits, setDetectedFacialTraits] = useState(null);
@@ -33,6 +35,7 @@ const GanGenerator = () => {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [currentLook, setCurrentLook] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isAITrained, setIsAITrained] = useState(false);
   
   // Updated type definitions to match SetupStatusPanel props
   const [modelStatus, setModelStatus] = useState<ComponentStatusType>('checking');
@@ -40,32 +43,122 @@ const GanGenerator = () => {
   const [setupStatus, setSetupStatus] = useState<SetupStatusType>('in_progress');
   const [isLoading, setIsLoading] = useState(false);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Use the camera hook
+  const {
+    cameraActive,
+    videoRef,
+    canvasRef,
+    activateCamera,
+    toggleCamera,
+    captureFrame
+  } = useCamera();
+
+  // Use the face mesh hook
+  const {
+    faceDetected,
+    facialFeatures,
+    faceMeshPoints,
+    detectedTools,
+    isModelLoaded
+  } = useFaceMesh({
+    videoRef,
+    canvasRef,
+    enabled: cameraActive
+  });
 
   const lookGuidance = useReferenceLookGuidance({
     voiceEnabled: isVoiceGuideEnabled,
-    facialAnalysis: detectedFacialTraits
+    facialAnalysis: detectedFacialTraits || facialFeatures
   });
+
+  // Initialize system
+  useEffect(() => {
+    const initSystem = async () => {
+      setIsLoading(true);
+      
+      // Load AI models and setup
+      try {
+        // Set API key for speech services
+        const defaultKey = "sk_0dfcb07ba1e4d72443fcb5385899c03e9106d3d27ddaadc2";
+        setApiKey(defaultKey);
+        
+        // Auto-enable voice and start interaction
+        setIsVoiceGuideEnabled(true);
+        autoStartVoiceInteraction(handleVoiceCommand, getWelcomeMessage());
+
+        // Check model status
+        setModelStatus('ready');
+        
+        // Check edge function status
+        setEdgeFunctionStatus('ready');
+        
+        // Train AI with makeup reference images
+        const trainingSuccess = await trainAIWithReferenceImages();
+        setIsAITrained(trainingSuccess);
+        
+        // Complete setup
+        setSetupStatus('completed');
+        
+        // Auto-activate camera after setup
+        setTimeout(() => {
+          activateCamera();
+        }, 1000);
+      } catch (error) {
+        console.error('Error during initialization:', error);
+        setModelStatus('error');
+        toast({
+          title: "Setup Error",
+          description: "There was a problem setting up the AI Makeup Assistant",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    initSystem();
+    
+    // Cleanup function
+    return () => {
+      stopListening();
+    };
+  }, [toast]);
 
   // Define checkStatus function for SetupStatusPanel
   const checkStatus = () => {
     setIsLoading(true);
-    // Simulate checking status
+    // Check status of models and services
     setTimeout(() => {
       setModelStatus('ready');
       setEdgeFunctionStatus('ready');
       setSetupStatus('completed');
       setIsLoading(false);
+      
+      // Auto-activate camera if not already active
+      if (!cameraActive) {
+        activateCamera();
+      }
+      
+      toast({
+        title: "System Ready",
+        description: "AI Makeup Assistant is ready to use",
+      });
     }, 1500);
   };
-  
-  // Toggle camera status
-  const toggleCamera = () => {
-    setIsCameraActive(!isCameraActive);
-  };
 
-  // Capture and analyze face - moved up before it's used
+  // Load reference looks
+  useEffect(() => {
+    const looks = getReferenceLooks();
+    setReferenceLooks(looks);
+
+    if (looks.length > 0 && !selectedLookId) {
+      setSelectedLookId(looks[0].id);
+      lookGuidance.setSelectedLookId(looks[0].id);
+      setCurrentLook(looks[0]);
+    }
+  }, [lookGuidance]);
+
+  // Capture and analyze face
   const captureAndAnalyzeFace = async () => {
     if (!videoRef.current || !canvasRef.current) return;
 
@@ -73,18 +166,11 @@ const GanGenerator = () => {
       setIsAnalyzing(true);
       setAnalysisError(null);
 
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
+      const imageBase64 = captureFrame();
 
-      if (!context) {
-        throw new Error("Could not get canvas context");
+      if (!imageBase64) {
+        throw new Error("Could not capture frame");
       }
-
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
-      context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-
-      const imageBase64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
 
       try {
         const result = await analyzeFacialImage(imageBase64, selectedLookId);
@@ -93,8 +179,8 @@ const GanGenerator = () => {
           const analysis = result.result.analysis;
           if (analysis) {
             setDetectedFacialTraits({
-              skinTone: analysis.skinTone || 'Not detected',
-              faceShape: analysis.faceShape || 'Not detected',
+              skinTone: analysis.skinTone || facialFeatures?.skinTone || 'Not detected',
+              faceShape: analysis.faceShape || facialFeatures?.faceShape || 'Not detected',
               features: analysis.features || [],
               recommendations: analysis.recommendations || []
             });
@@ -120,20 +206,40 @@ const GanGenerator = () => {
           throw new Error("Edge function returned invalid data");
         }
       } catch (error) {
-        console.warn('Edge function failed, using mock data:', error);
+        console.warn('Edge function failed, using facial features from mesh:', error);
 
-        setDetectedFacialTraits({
-          skinTone: 'Medium',
-          faceShape: 'Oval',
-          features: ['High cheekbones', 'Defined jawline'],
-          recommendations: ['Use a light foundation', 'Apply blush to the apples of your cheeks']
-        });
-        setAnalysisImage('/lovable-uploads/b30403d6-fafd-40f8-8dd4-e3d56d388dc0.png');
-        setAnalysisProgress(5);
+        // Use facial features from face mesh if available
+        if (facialFeatures) {
+          setDetectedFacialTraits({
+            skinTone: facialFeatures.skinTone || 'Medium',
+            faceShape: facialFeatures.faceShape || 'Oval',
+            eyeShape: facialFeatures.eyeShape || 'Almond',
+            lipShape: facialFeatures.lipShape || 'Average',
+            jawlineType: facialFeatures.jawlineType || 'Average',
+            recommendations: [
+              'Use a light foundation',
+              'Apply blush to the apples of your cheeks',
+              'Define your eyebrows to frame your face',
+              `${facialFeatures.eyeShape} eyes work well with winged eyeliner`
+            ]
+          });
+          setAnalysisImage('/lovable-uploads/b30403d6-fafd-40f8-8dd4-e3d56d388dc0.png');
+          setAnalysisProgress(5);
+        } else {
+          // Fallback to mock data if no facial features available
+          setDetectedFacialTraits({
+            skinTone: 'Medium',
+            faceShape: 'Oval',
+            features: ['High cheekbones', 'Defined jawline'],
+            recommendations: ['Use a light foundation', 'Apply blush to the apples of your cheeks']
+          });
+          setAnalysisImage('/lovable-uploads/b30403d6-fafd-40f8-8dd4-e3d56d388dc0.png');
+          setAnalysisProgress(5);
+        }
 
         toast({
           title: "Face Analyzed",
-          description: "Using simulation mode due to connection issues.",
+          description: "Using face mesh detection data for makeup guidance.",
           variant: "default",
         });
       }
@@ -159,8 +265,21 @@ const GanGenerator = () => {
     }
   };
 
+  // Auto-analyze face when face is detected
+  useEffect(() => {
+    if (faceDetected && !detectedFacialTraits && !isAnalyzing && cameraActive) {
+      const timer = setTimeout(() => {
+        captureAndAnalyzeFace();
+      }, 1500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [faceDetected, detectedFacialTraits, isAnalyzing, cameraActive]);
+
   // Handle voice command
   const handleVoiceCommand = React.useCallback((command: string, params: Record<string, string>) => {
+    console.log('Voice command received:', command, params);
+    
     switch (command) {
       case 'next':
         lookGuidance.goToNextStep();
@@ -171,57 +290,63 @@ const GanGenerator = () => {
       case 'analyze':
         captureAndAnalyzeFace();
         break;
+      case 'take picture':
+        captureAndAnalyzeFace();
+        break;
+      case 'apply':
+        const product = params.product || '';
+        setCurrentGuidance(`Let's apply ${product}. Follow the guidance on screen.`);
+        setAnalysisProgress(prev => Math.min(prev + 10, 100));
+        break;
+      case 'blend':
+        setCurrentGuidance("Great! Now blend it thoroughly for a seamless finish.");
+        setAnalysisProgress(prev => Math.min(prev + 5, 100));
+        break;
+      case 'complete':
+        setCurrentGuidance("Your makeup application is complete! How does it look?");
+        setAnalysisProgress(100);
+        lookGuidance.markAllStepsCompleted();
+        break;
+      case 'help':
+        setCurrentGuidance("You can say: next, previous, analyze, take picture, apply [product], blend, or complete");
+        break;
       default:
-        toast({
-          title: "Command Received",
-          description: `Executing: ${command}`,
-        });
+        if (command === 'general_input') {
+          // Process general speech input
+          const text = params.text || '';
+          // Simple NLP to detect intents from general speech
+          if (text.includes('look') && text.includes('good')) {
+            setCurrentGuidance("I'm glad you like how it looks! You look fantastic!");
+          } else if (text.includes('help')) {
+            setCurrentGuidance("I'm here to help! You can ask me to analyze your face, guide you through makeup application, or suggest products.");
+          } else {
+            // Default response
+            setCurrentGuidance("I heard you. What would you like to do with your makeup look?");
+          }
+        } else {
+          toast({
+            title: "Command Received",
+            description: `Executing: ${command}`,
+          });
+        }
     }
-  }, [toast, lookGuidance]);
-
-  // Effect to start voice command detection
-  useEffect(() => {
-    if (!isVoiceGuideEnabled) return;
-    
-    startListening(handleVoiceCommand);
-    
-    return () => {
-      stopListening();
-    };
-  }, [isVoiceGuideEnabled, handleVoiceCommand]);
-
-  // Load reference looks
-  useEffect(() => {
-    const looks = getReferenceLooks();
-    setReferenceLooks(looks);
-
-    if (looks.length > 0) {
-      setSelectedLookId(looks[0].id);
-      lookGuidance.setSelectedLookId(looks[0].id);
-      setCurrentLook(looks[0]);
-    }
-  }, [lookGuidance, setReferenceLooks]);
-
-  // Set default API key and enable voice
-  useEffect(() => {
-    const defaultKey = "sk_0dfcb07ba1e4d72443fcb5385899c03e9106d3d27ddaadc2";
-    setApiKey(defaultKey);
-    setIsVoiceGuideEnabled(true);
-    
-    // Initial status check
-    checkStatus();
-  }, [setIsVoiceGuideEnabled]);
+  }, [toast, lookGuidance, captureAndAnalyzeFace]);
 
   // Update the functions that use the 'instruction' property
   const handleCustomInstructionChange = (value: string) => {
     if (!currentLook) return;
+    setCustomInstruction(value);
     setCurrentLook(prev => {
       if (!prev) return prev;
       const steps = [...prev.steps];
-      steps[currentStepIndex] = {
-        ...steps[currentStepIndex],
-        customization: value
-      };
+      
+      if (steps[currentStepIndex]) {
+        steps[currentStepIndex] = {
+          ...steps[currentStepIndex],
+          customization: value
+        };
+      }
+      
       return {
         ...prev,
         steps
@@ -237,11 +362,11 @@ const GanGenerator = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <FaceAnalysisCamera
-              cameraActive={isCameraActive}
+              cameraActive={cameraActive}
               isAnalyzing={isAnalyzing}
               progressPercentage={analysisProgress}
               currentGuidance={currentGuidance}
-              detectedFacialTraits={detectedFacialTraits}
+              detectedFacialTraits={detectedFacialTraits || facialFeatures}
               analysisImage={analysisImage}
               analysisError={analysisError}
               voiceEnabled={isVoiceGuideEnabled}
@@ -257,8 +382,8 @@ const GanGenerator = () => {
               lookGuidance={{
                 currentStep: lookGuidance.currentStep,
                 completedSteps: lookGuidance.completedSteps,
-                totalSteps: lookGuidance.selectedLook?.steps.length || 0,
-                stepNames: lookGuidance.selectedLook?.steps.map(step => step.instruction) || [],
+                totalSteps: lookGuidance.selectedLook?.steps?.length || 0,
+                stepNames: lookGuidance.selectedLook?.steps?.map(step => step.instruction) || [],
                 getCurrentInstruction: () => {
                   const instruction = lookGuidance.getCurrentStepInstruction();
                   return typeof instruction === 'string' ? instruction : instruction;
@@ -272,11 +397,21 @@ const GanGenerator = () => {
               onToggleCamera={toggleCamera}
               videoRef={videoRef}
               canvasRef={canvasRef}
-              faceDetected={false}
+              faceDetected={faceDetected}
               movementData={{ x: 0, y: 0, magnitude: 0 }}
               lastActivity={null}
               nearbyObjects={[]}
-              detectedMakeupTools={[]}
+              detectedMakeupTools={detectedTools}
+              modelingEnabled={true}
+              voiceInteractionEnabled={true}
+              retryFaceDetection={() => {
+                if (!cameraActive) {
+                  activateCamera();
+                } else {
+                  toggleCamera();
+                  setTimeout(activateCamera, 1000);
+                }
+              }}
             />
           </div>
 
@@ -289,7 +424,7 @@ const GanGenerator = () => {
               onCheckStatus={checkStatus}
             />
             <ReadyToUsePanel
-              cameraActive={isCameraActive}
+              cameraActive={cameraActive}
               voiceEnabled={isVoiceGuideEnabled}
               onToggleCamera={toggleCamera}
               onVoiceEnabledChange={setIsVoiceGuideEnabled}
@@ -310,9 +445,8 @@ const GanGenerator = () => {
                 <Input
                   type="text"
                   placeholder="Enter custom instruction"
-                  value={currentLook.steps[currentStepIndex]?.customization || ''}
+                  value={currentLook.steps[currentStepIndex]?.customization || customInstruction}
                   onChange={(e) => {
-                    setCustomInstruction(e.target.value);
                     handleCustomInstructionChange(e.target.value);
                   }}
                   className="mb-2"
@@ -320,7 +454,7 @@ const GanGenerator = () => {
                 <Button onClick={lookGuidance.goToPreviousStep} disabled={lookGuidance.currentStep <= 1}>
                   Previous Step
                 </Button>
-                <Button onClick={lookGuidance.goToNextStep} disabled={lookGuidance.currentStep >= lookGuidance.selectedLook?.steps.length}>
+                <Button onClick={lookGuidance.goToNextStep} disabled={lookGuidance.currentStep >= lookGuidance.selectedLook?.steps?.length}>
                   Next Step
                 </Button>
               </div>

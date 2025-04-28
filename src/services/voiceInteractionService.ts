@@ -1,7 +1,7 @@
 
-// Basic voice interaction service
+// Voice interaction service
 
-let recognition: any | null = null; // Changed from SpeechRecognition to any
+let recognition: any | null = null; // Use any type for compatibility
 let isListening = false;
 
 interface VoiceCommandHandler {
@@ -10,13 +10,43 @@ interface VoiceCommandHandler {
 
 let commandHandler: VoiceCommandHandler | null = null;
 
+// User session storage to track visits
+const isFirstVisit = () => {
+  const visited = localStorage.getItem('hasVisitedBefore');
+  if (!visited) {
+    localStorage.setItem('hasVisitedBefore', 'true');
+    return true;
+  }
+  return false;
+};
+
+// Welcome message based on if it's the first visit or a returning visit
+export const getWelcomeMessage = () => {
+  return isFirstVisit()
+    ? "Welcome to the AI Makeup Assistant! I'll help you apply makeup and provide guidance. What would you like to try today?"
+    : "Welcome back to the AI Makeup Assistant! Ready to continue your makeup journey? What look would you like to try today?";
+};
+
+// Start voice interaction automatically
+export const autoStartVoiceInteraction = (handler: VoiceCommandHandler, welcomeMessage?: string) => {
+  startListening(handler);
+  
+  // Speak welcome message
+  if (welcomeMessage || welcomeMessage === undefined) {
+    const message = welcomeMessage || getWelcomeMessage();
+    speakInstruction(message);
+  }
+  
+  return true;
+};
+
 export const startListening = (onCommand: VoiceCommandHandler) => {
   if (!('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
     console.error('Speech recognition not supported in this browser');
     return false;
   }
   
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const SpeechRecognition = (window.SpeechRecognition || window.webkitSpeechRecognition) as any;
   
   if (recognition) {
     recognition.stop();
@@ -29,30 +59,53 @@ export const startListening = (onCommand: VoiceCommandHandler) => {
   
   commandHandler = onCommand;
   
-  recognition.onresult = (event) => {
+  recognition.onresult = (event: any) => {
     const transcript = event.results[event.results.length - 1][0].transcript.trim().toLowerCase();
     console.log('Voice command detected:', transcript);
     
-    // Simple command parsing
+    // Enhanced command parsing for makeup application
     const commands = {
       'next': /^next( step)?$/i,
       'previous': /^(previous|back)( step)?$/i,
-      'analyze': /^(analyze|scan)( face)?$/i,
+      'analyze': /^(analyze|scan|detect)( face| makeup)?$/i,
       'stop': /^(stop|end)( listening)?$/i,
+      'apply': /^apply (foundation|concealer|blush|lipstick|eyeshadow|mascara|eyeliner|powder|bronzer|highlighter)$/i,
+      'blend': /^blend( makeup| it)?$/i,
+      'complete': /^(complete|done|finished)$/i,
+      'help': /^(help|what can i say|commands)$/i,
+      'take picture': /^(take|capture) (picture|photo|image)$/i,
     };
     
     // Check if the transcript matches any command
     for (const [command, pattern] of Object.entries(commands)) {
       if (pattern.test(transcript)) {
+        // Extract parameters for specific commands
+        const params: Record<string, string> = {};
+        
+        if (command === 'apply') {
+          const match = transcript.match(/apply (\w+)/);
+          if (match && match[1]) {
+            params.product = match[1];
+          }
+        }
+        
         if (commandHandler) {
-          commandHandler(command, {});
+          commandHandler(command, params);
+          // Provide voice feedback for recognized commands
+          speakInstruction(`I heard you say ${transcript}. Processing your command.`);
         }
         break;
       }
     }
+    
+    // If no command matched, provide general response
+    if (commandHandler) {
+      commandHandler('general_input', { text: transcript });
+      speakInstruction(`I heard you say ${transcript}. How can I help with your makeup?`);
+    }
   };
   
-  recognition.onerror = (event) => {
+  recognition.onerror = (event: any) => {
     console.error('Speech recognition error:', event.error);
   };
   
@@ -61,7 +114,7 @@ export const startListening = (onCommand: VoiceCommandHandler) => {
     isListening = false;
     // Auto restart if it was supposed to keep listening
     if (recognition && commandHandler) {
-      console.info('Started listening for voice commands');
+      console.info('Restarting voice command listening');
       recognition.start();
       isListening = true;
     }

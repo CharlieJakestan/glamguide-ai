@@ -6,6 +6,8 @@ export const useCamera = () => {
   const [cameraActive, setCameraActive] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [deviceNotFound, setDeviceNotFound] = useState(false);
+  const [faceDetected, setFaceDetected] = useState(false);
+  const [faceMesh, setFaceMesh] = useState(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -22,6 +24,9 @@ export const useCamera = () => {
       });
       return;
     }
+
+    // Auto-activate camera on component mount
+    activateCamera();
 
     // Reset device error states when component mounts
     setDeviceNotFound(false);
@@ -43,6 +48,7 @@ export const useCamera = () => {
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
+    setCameraActive(false);
   }, []);
 
   const checkDevices = async (): Promise<boolean> => {
@@ -74,14 +80,7 @@ export const useCamera = () => {
     }
   };
 
-  const toggleCamera = async () => {
-    if (cameraActive) {
-      // Stop camera
-      stopCameraStream();
-      setCameraActive(false);
-      return;
-    }
-    
+  const activateCamera = async () => {
     // Reset error states
     setDeviceNotFound(false);
     setPermissionDenied(false);
@@ -166,6 +165,16 @@ export const useCamera = () => {
     }
   };
 
+  const toggleCamera = async () => {
+    if (cameraActive) {
+      // Stop camera
+      stopCameraStream();
+    } else {
+      // Start camera
+      activateCamera();
+    }
+  };
+
   const captureFrame = useCallback((): string | null => {
     if (!videoRef.current) return null;
     
@@ -194,6 +203,7 @@ export const useCamera = () => {
   return {
     cameraActive,
     toggleCamera,
+    activateCamera,
     videoRef,
     canvasRef,
     streamRef,
@@ -201,6 +211,10 @@ export const useCamera = () => {
     permissionDenied,
     deviceNotFound,
     checkDevices,
-    stopCameraStream
+    stopCameraStream,
+    faceDetected,
+    setFaceDetected,
+    faceMesh,
+    setFaceMesh
   };
 };
