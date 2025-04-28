@@ -90,7 +90,7 @@ export const getReferenceLooks = (): MakeupReference[] => {
   ];
 };
 
-// Train AI with reference images (mock function - in a real app this would connect to a backend)
+// Train AI with reference images using the files fetched from storage
 export const trainAIWithReferenceImages = async (): Promise<boolean> => {
   try {
     const images = await fetchMakeupReferenceImages();

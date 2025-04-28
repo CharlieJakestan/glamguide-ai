@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { 
@@ -149,6 +148,18 @@ export const useReferenceLookGuidance = ({
     return instruction;
   };
   
+  // Mark all steps as completed
+  const markAllStepsCompleted = () => {
+    if (selectedLook && selectedLook.steps.length > 0) {
+      const allStepIndices = Array.from(
+        { length: selectedLook.steps.length }, 
+        (_, index) => index
+      );
+      setCompletedSteps(allStepIndices);
+      setCurrentStep(selectedLook.steps.length - 1); // Move to the last step
+    }
+  };
+  
   return {
     availableLooks,
     selectedLookId,
@@ -164,5 +175,6 @@ export const useReferenceLookGuidance = ({
     goToPreviousStep,
     markCurrentStepCompleted,
     selectStep,
+    markAllStepsCompleted,
   };
 };

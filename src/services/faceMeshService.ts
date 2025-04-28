@@ -87,7 +87,10 @@ export const drawFaceMesh = (
 
   // Draw each face
   predictions.forEach(prediction => {
-    const keypoints = prediction.scaledMesh;
+    // Fix for Tensor2D issue - ensure we're working with an array
+    const keypoints = Array.isArray(prediction.scaledMesh) 
+      ? prediction.scaledMesh 
+      : Array.from(tf.tensor2d(prediction.scaledMesh).arraySync());
     
     // Draw points
     for (let i = 0; i < keypoints.length; i++) {

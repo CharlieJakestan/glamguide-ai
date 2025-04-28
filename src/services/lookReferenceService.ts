@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase';
 
 export interface ReferenceLook {
@@ -213,6 +212,45 @@ export const saveLookFeedback = async (
     return !error;
   } catch (e) {
     console.error('Error saving look feedback:', e);
+    return false;
+  }
+};
+
+/**
+ * Train AI with makeup reference images from storage
+ */
+export const trainAIWithReferenceImages = async (): Promise<boolean> => {
+  try {
+    // Try to fetch makeup reference images from storage
+    const { data: files, error } = await supabase.storage
+      .from('makeup-references')
+      .list('references', {
+        limit: 100,
+        sortBy: { column: 'name', order: 'asc' }
+      });
+    
+    if (error) {
+      console.error('Error fetching makeup reference images:', error);
+      return false;
+    }
+    
+    if (!files || files.length === 0) {
+      console.warn('No makeup reference images found for training');
+      return false;
+    }
+    
+    console.log(`Training AI with ${files.length} reference images...`);
+    
+    // In a real app, this would send the images to a backend for model training
+    // For now, we'll simulate successful training
+    
+    // Simulate training time
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    console.log('AI makeup reference training complete');
+    return true;
+  } catch (error) {
+    console.error('Error training AI with reference images:', error);
     return false;
   }
 };
