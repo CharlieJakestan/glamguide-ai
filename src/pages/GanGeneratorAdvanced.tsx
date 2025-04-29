@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '@/components/Layout';
 import { useToast } from '@/hooks/use-toast';
@@ -191,11 +190,8 @@ const GanGeneratorAdvanced = () => {
   
   const stepNames = lookGuidance.selectedLook?.steps.map(step => step.instruction) || [];
   
-  // Handle custom instruction change
   const handleCustomInstructionChange = (value: string) => {
-    // Implementation of custom instruction change
     console.log("Custom instruction changed to:", value);
-    // Would update step instructions in a real implementation
   };
   
   if (isLoading && !faceDetectionReady) {
@@ -212,6 +208,26 @@ const GanGeneratorAdvanced = () => {
     );
   }
   
+  type MakeupReferenceWithCategory = {
+    id: string;
+    name: string;
+    description: string;
+    imageUrl: string;
+    category: string;
+    tags?: string[];
+  };
+
+  const ensureCategoryInReferenceLooks = (looks: ReferenceLook[]): MakeupReferenceWithCategory[] => {
+    return looks.map(look => ({
+      id: look.id,
+      name: look.name,
+      description: look.description,
+      imageUrl: look.imageUrl,
+      category: look.category || look.occasion || 'general',
+      tags: look.tags,
+    }));
+  };
+
   return (
     <Layout>
       <div className="max-w-4xl mx-auto">
@@ -250,7 +266,7 @@ const GanGeneratorAdvanced = () => {
               onToggleCamera={toggleCamera}
               onVoiceEnabledChange={setVoiceEnabled}
               analysisProgress={progressPercentage}
-              referenceLooks={referenceLooks}
+              referenceLooks={ensureCategoryInReferenceLooks(referenceLooks)}
               onSelectReferenceLook={(lookId) => {
                 setSelectedLookId(lookId);
                 lookGuidance.setSelectedLookId(lookId);
@@ -269,7 +285,7 @@ const GanGeneratorAdvanced = () => {
               analysisError={analysisError}
               voiceEnabled={voiceEnabled}
               onVoiceEnabledChange={setVoiceEnabled}
-              availableLooks={referenceLooks}
+              availableLooks={ensureCategoryInReferenceLooks(referenceLooks)}
               selectedLookId={selectedLookId}
               onSelectLook={(lookId) => {
                 setSelectedLookId(lookId);

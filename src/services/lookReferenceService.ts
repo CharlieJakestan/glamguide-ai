@@ -1,4 +1,3 @@
-
 import { trainAIWithReferenceImages as trainWithImages } from '@/services/makeupReferenceService';
 
 export interface ReferenceLook {
@@ -9,14 +8,21 @@ export interface ReferenceLook {
   difficulty: 'beginner' | 'intermediate' | 'advanced';
   occasion: string;
   duration: number; // in minutes
+  category: string; // Added category property
   steps: {
     step: number;
     instruction: string;
     imageUrl?: string;
     toolsNeeded?: string[];
     productsNeeded?: string[];
+    technique?: string; // Added technique property
   }[];
   tags: string[];
+  products: { // Added products property
+    name: string;
+    category: string;
+    shade?: string;
+  }[];
 }
 
 // Sample reference looks for demonstration
@@ -28,50 +34,67 @@ const referenceLooks: ReferenceLook[] = [
     imageUrl: '/assets/looks/natural-everyday.jpg',
     difficulty: 'beginner',
     occasion: 'daily',
+    category: 'everyday', // Added category
     duration: 10,
     steps: [
       {
         step: 1,
         instruction: 'Apply a light coverage foundation or BB cream all over face using fingertips or a beauty sponge',
         toolsNeeded: ['beauty sponge'],
-        productsNeeded: ['foundation', 'bb cream']
+        productsNeeded: ['foundation', 'bb cream'],
+        technique: 'Pat and blend' // Added technique
       },
       {
         step: 2,
         instruction: 'Apply concealer under eyes and on any blemishes, blend well',
         toolsNeeded: ['concealer brush'],
-        productsNeeded: ['concealer']
+        productsNeeded: ['concealer'],
+        technique: 'Dab and blend' // Added technique
       },
       {
         step: 3,
         instruction: 'Lightly dust setting powder on T-zone to reduce shine',
         toolsNeeded: ['powder brush'],
-        productsNeeded: ['setting powder']
+        productsNeeded: ['setting powder'],
+        technique: 'Light dusting motion' // Added technique
       },
       {
         step: 4,
         instruction: 'Apply a neutral eyeshadow across lid and blend upward',
         toolsNeeded: ['eyeshadow brush'],
-        productsNeeded: ['neutral eyeshadow palette']
+        productsNeeded: ['neutral eyeshadow palette'],
+        technique: 'Sweep and blend' // Added technique
       },
       {
         step: 5,
         instruction: 'Apply mascara to upper lashes',
-        productsNeeded: ['mascara']
+        productsNeeded: ['mascara'],
+        technique: 'Wiggle and sweep' // Added technique
       },
       {
         step: 6,
         instruction: 'Apply a natural pink blush to the apples of cheeks',
         toolsNeeded: ['blush brush'],
-        productsNeeded: ['blush']
+        productsNeeded: ['blush'],
+        technique: 'Smile and sweep' // Added technique
       },
       {
         step: 7,
         instruction: 'Finish with a tinted lip balm',
-        productsNeeded: ['tinted lip balm']
+        productsNeeded: ['tinted lip balm'],
+        technique: 'Apply directly or with finger' // Added technique
       }
     ],
-    tags: ['natural', 'everyday', 'quick', 'minimal']
+    tags: ['natural', 'everyday', 'quick', 'minimal'],
+    products: [ // Added products array
+      { name: 'BB Cream', category: 'face' },
+      { name: 'Concealer', category: 'face' },
+      { name: 'Setting Powder', category: 'face' },
+      { name: 'Neutral Eyeshadow', category: 'eyes' },
+      { name: 'Mascara', category: 'eyes' },
+      { name: 'Natural Pink Blush', category: 'cheeks' },
+      { name: 'Tinted Lip Balm', category: 'lips' }
+    ]
   },
   {
     id: 'evening-glam',
@@ -80,73 +103,102 @@ const referenceLooks: ReferenceLook[] = [
     imageUrl: '/assets/looks/evening-glam.jpg',
     difficulty: 'advanced',
     occasion: 'evening',
+    category: 'evening', // Added category
     duration: 25,
     steps: [
       {
         step: 1,
         instruction: 'Apply primer to face and eyelids',
-        productsNeeded: ['face primer', 'eye primer']
+        productsNeeded: ['face primer', 'eye primer'],
+        technique: 'Pat in with fingertips' // Added technique
       },
       {
         step: 2,
         instruction: 'Apply full coverage foundation with a foundation brush',
         toolsNeeded: ['foundation brush'],
-        productsNeeded: ['full coverage foundation']
+        productsNeeded: ['full coverage foundation'],
+        technique: 'Buff in circular motions' // Added technique
       },
       {
         step: 3,
         instruction: 'Conceal under eyes and any imperfections with a high coverage concealer',
         toolsNeeded: ['concealer brush'],
-        productsNeeded: ['high coverage concealer']
+        productsNeeded: ['high coverage concealer'],
+        technique: 'Pat and blend' // Added technique
       },
       {
         step: 4,
         instruction: 'Set face with translucent powder',
         toolsNeeded: ['powder brush'],
-        productsNeeded: ['translucent powder']
+        productsNeeded: ['translucent powder'],
+        technique: 'Press and roll' // Added technique
       },
       {
         step: 5,
         instruction: 'Contour cheekbones, forehead, and jawline',
         toolsNeeded: ['contour brush'],
-        productsNeeded: ['contour powder or cream']
+        productsNeeded: ['contour powder or cream'],
+        technique: 'Blend in upward motion' // Added technique
       },
       {
         step: 6,
         instruction: 'Apply dark eyeshadow to crease, blend well',
         toolsNeeded: ['crease brush', 'blending brush'],
-        productsNeeded: ['eyeshadow palette']
+        productsNeeded: ['eyeshadow palette'],
+        technique: 'Build and blend' // Added technique
       },
       {
         step: 7,
         instruction: 'Apply shimmery eyeshadow to lid',
         toolsNeeded: ['flat eyeshadow brush'],
-        productsNeeded: ['shimmer eyeshadow']
+        productsNeeded: ['shimmer eyeshadow'],
+        technique: 'Pat on with finger or brush' // Added technique
       },
       {
         step: 8,
         instruction: 'Line upper lash line with liquid eyeliner, creating a wing',
-        productsNeeded: ['liquid eyeliner']
+        productsNeeded: ['liquid eyeliner'],
+        technique: 'Short strokes from inner to outer corner' // Added technique
       },
       {
         step: 9,
         instruction: 'Apply false lashes and mascara',
         toolsNeeded: ['lash applicator'],
-        productsNeeded: ['false lashes', 'lash glue', 'mascara']
+        productsNeeded: ['false lashes', 'lash glue', 'mascara'],
+        technique: 'Apply glue, wait 30 seconds, place and press' // Added technique
       },
       {
         step: 10,
         instruction: 'Add highlighter to cheekbones, brow bone, and cupid\'s bow',
         toolsNeeded: ['highlighting brush'],
-        productsNeeded: ['highlighter']
+        productsNeeded: ['highlighter'],
+        technique: 'Sweep and tap' // Added technique
       },
       {
         step: 11,
         instruction: 'Line lips and apply a bold lipstick',
-        productsNeeded: ['lip liner', 'lipstick']
+        productsNeeded: ['lip liner', 'lipstick'],
+        technique: 'Outline then fill in' // Added technique
       }
     ],
-    tags: ['dramatic', 'evening', 'glam', 'special occasion']
+    tags: ['dramatic', 'evening', 'glam', 'special occasion'],
+    products: [ // Added products array
+      { name: 'Face Primer', category: 'face' },
+      { name: 'Eye Primer', category: 'eyes' },
+      { name: 'Full Coverage Foundation', category: 'face' },
+      { name: 'High Coverage Concealer', category: 'face' },
+      { name: 'Translucent Powder', category: 'face' },
+      { name: 'Contour Powder', category: 'face' },
+      { name: 'Eyeshadow Palette', category: 'eyes' },
+      { name: 'Shimmer Eyeshadow', category: 'eyes' },
+      { name: 'Liquid Eyeliner', category: 'eyes' },
+      { name: 'False Lashes', category: 'eyes' },
+      { name: 'Lash Glue', category: 'eyes' },
+      { name: 'Mascara', category: 'eyes' },
+      { name: 'Highlighter', category: 'face' },
+      { name: 'Lip Liner', category: 'lips' },
+      { name: 'Bold Lipstick', category: 'lips', shade: 'Red' }
+    ]
   }
 ];
 
