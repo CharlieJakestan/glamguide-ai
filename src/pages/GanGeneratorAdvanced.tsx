@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '@/components/Layout';
 import { useToast } from '@/hooks/use-toast';
@@ -6,7 +7,7 @@ import { analyzeFacialImage } from '@/services/ganService';
 import SetupStatusPanel from '@/components/makeup/SetupStatusPanel';
 import ReadyToUsePanel from '@/components/makeup/ReadyToUsePanel';
 import AdvancedFaceAnalysisCamera from '@/components/makeup/AdvancedFaceAnalysisCamera';
-import { getReferenceLooks } from '@/services/lookReferenceService';
+import { getReferenceLooks, ReferenceLook } from '@/services/lookReferenceService';
 import { useReferenceLookGuidance } from '@/hooks/useReferenceLookGuidance';
 import { initAdvancedFaceDetection } from '@/lib/advancedFaceDetection';
 import MakeupTips from '@/components/makeup/MakeupTips';
