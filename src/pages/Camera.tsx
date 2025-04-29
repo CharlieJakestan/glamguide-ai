@@ -1,5 +1,5 @@
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, Mic, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Layout from '@/components/Layout';
@@ -12,11 +12,14 @@ import CameraControls from '@/components/camera/CameraControls';
 import IntensitySettings from '@/components/camera/IntensitySettings';
 import InstructionsPanel from '@/components/camera/InstructionsPanel';
 import VideoDisplay from '@/components/camera/VideoDisplay';
+import VideoDisplayAR from '@/components/camera/VideoDisplayAR';
 import LookNavigation from '@/components/camera/LookNavigation';
 import AIGuidancePanel from '@/components/camera/AIGuidancePanel';
 import APIKeyDialog from '@/components/camera/APIKeyDialog';
 import { useMakeupGuidance } from '@/hooks/useMakeupGuidance';
 import { useCamera } from '@/hooks/useCamera';
+import { useFaceMesh } from '@/hooks/useFaceMesh';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const CameraPage = () => {
   const { toast } = useToast();
@@ -24,12 +27,17 @@ const CameraPage = () => {
   const {
     cameraActive,
     toggleCamera,
+    activateCamera,
     videoRef,
     canvasRef,
     streamRef,
     permissionDenied,
     deviceNotFound,
-    checkDevices
+    checkDevices,
+    availableDevices,
+    selectedDeviceId,
+    selectCamera,
+    loadCameraDevices
   } = useCamera();
   
   const [isLoading, setIsLoading] = useState(true);
@@ -38,12 +46,24 @@ const CameraPage = () => {
   const [currentLook, setCurrentLook] = useState<MakeupLook | null>(null);
   const [intensitySettings, setIntensitySettings] = useState<Record<string, number>>({});
   const [showSettings, setShowSettings] = useState(false);
-  const [faceDetected, setFaceDetected] = useState(false);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [isLoadingModels, setIsLoadingModels] = useState(true);
+  const [showARView, setShowARView] = useState(false);
   
   const [showAIGuidance, setShowAIGuidance] = useState(false);
   const [showAPIKeyDialog, setShowAPIKeyDialog] = useState(false);
+  
+  // Use the faceMesh hook to get face detection data
+  const { 
+    faceDetected, 
+    facialFeatures, 
+    detectedTools, 
+    isModelLoaded 
+  } = useFaceMesh({
+    videoRef,
+    canvasRef,
+    enabled: cameraActive
+  });
   
   useEffect(() => {
     const fetchData = async () => {
@@ -170,7 +190,10 @@ const CameraPage = () => {
     };
     
     loadModels();
-  }, [toast]);
+    
+    // Attempt to load camera devices first
+    loadCameraDevices();
+  }, [toast, loadCameraDevices]);
   
   const {
     currentGuidance,
@@ -196,94 +219,6 @@ const CameraPage = () => {
       resetAnalysis();
     }
   }, [currentLook, resetAnalysis]);
-  
-  useEffect(() => {
-    if (cameraActive && videoRef.current && canvasRef.current && modelsLoaded) {
-      startFaceDetection();
-    }
-  }, [cameraActive, modelsLoaded]);
-  
-  const startFaceDetection = () => {
-    if (!videoRef.current || !canvasRef.current || !modelsLoaded) return;
-    
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    
-    const updateDimensions = () => {
-      if (video.videoWidth && video.videoHeight) {
-        const videoWidth = video.videoWidth;
-        const videoHeight = video.videoHeight;
-        
-        canvas.width = videoWidth;
-        canvas.height = videoHeight;
-      }
-    };
-    
-    video.addEventListener('loadedmetadata', updateDimensions);
-    
-    const detectFace = async () => {
-      if (!video || !canvas || !cameraActive || !modelsLoaded) return;
-      
-      try {
-        // Simplified face detection instead of using detectFacialLandmarks
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          // Draw video frame to canvas
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          
-          // For a complete app, we would detect faces here
-          // For this simplified version, we'll just assume a face is detected
-          setFaceDetected(true);
-          
-          // Apply simple visual effects to simulate makeup
-          if (currentLook) {
-            const makeupProducts = currentLook.products.map(item => {
-              const product = products.find(p => p.id === item.product_id);
-              return {
-                type: product?.category || 'unknown',
-                color: product?.color || '#FF0000',
-                intensity: intensitySettings[item.product_id] || item.intensity,
-              };
-            });
-            
-            // Since we don't have real face detection, we'll draw some simple visual effects
-            ctx.save();
-            
-            // Example: draw a simple blush effect
-            const blush = makeupProducts.find(p => p.type === 'blush');
-            if (blush) {
-              const centerX = canvas.width / 2;
-              const centerY = canvas.height / 2;
-              
-              ctx.beginPath();
-              ctx.arc(centerX - 50, centerY, 30, 0, 2 * Math.PI);
-              ctx.fillStyle = `rgba(255, 100, 100, ${blush.intensity * 0.3})`;
-              ctx.fill();
-              
-              ctx.beginPath();
-              ctx.arc(centerX + 50, centerY, 30, 0, 2 * Math.PI);
-              ctx.fillStyle = `rgba(255, 100, 100, ${blush.intensity * 0.3})`;
-              ctx.fill();
-            }
-            
-            ctx.restore();
-          }
-        }
-      } catch (error) {
-        console.error('Error in face detection loop:', error);
-      }
-      
-      if (cameraActive) {
-        requestAnimationFrame(detectFace);
-      }
-    };
-    
-    detectFace();
-    
-    return () => {
-      video.removeEventListener('loadedmetadata', updateDimensions);
-    };
-  };
   
   const handleIntensityChange = (productId: string, value: number[]) => {
     setIntensitySettings(prev => ({
@@ -314,9 +249,7 @@ const CameraPage = () => {
   };
   
   const retryFaceDetection = () => {
-    setFaceDetected(false);
     if (videoRef.current && canvasRef.current && modelsLoaded) {
-      startFaceDetection();
       toast({
         title: 'Retrying',
         description: 'Attempting to detect face again...',
@@ -343,11 +276,6 @@ const CameraPage = () => {
           description: 'Face detection models loaded successfully.',
           variant: 'default',
         });
-        
-        // If camera is already running, restart face detection
-        if (cameraActive) {
-          startFaceDetection();
-        }
       } else {
         toast({
           title: 'Error',
@@ -419,20 +347,66 @@ const CameraPage = () => {
             onNavigate={navigateLooks}
           />
           
-          <VideoDisplay
-            videoRef={videoRef}
-            canvasRef={canvasRef}
-            isStreamActive={cameraActive}
-            faceDetected={faceDetected}
-            retryFaceDetection={retryFaceDetection}
-            guidanceHighlight={showAIGuidance && currentGuidance?.visualGuide}
-          />
+          {isLoading ? (
+            <div className="flex justify-center items-center h-64">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
+            </div>
+          ) : (
+            <>
+              {showARView ? (
+                <VideoDisplayAR
+                  videoRef={videoRef}
+                  canvasRef={canvasRef}
+                  isStreamActive={cameraActive}
+                  faceDetected={faceDetected}
+                  retryFaceDetection={retryFaceDetection}
+                  showAREffects={true}
+                  detectedTools={detectedTools}
+                />
+              ) : (
+                <VideoDisplay
+                  videoRef={videoRef}
+                  canvasRef={canvasRef}
+                  isStreamActive={cameraActive}
+                  faceDetected={faceDetected}
+                  retryFaceDetection={retryFaceDetection}
+                  detectedTools={detectedTools}
+                />
+              )}
+              
+              <div className="flex justify-between mt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowARView(!showARView)}
+                >
+                  {showARView ? 'Standard View' : 'AR Effects View'}
+                </Button>
+                
+                {facialFeatures && (
+                  <div className="text-xs text-right text-gray-500">
+                    {facialFeatures.faceShape && `Face: ${facialFeatures.faceShape}`}
+                    {facialFeatures.eyeShape && ` • Eyes: ${facialFeatures.eyeShape}`}
+                    {facialFeatures.lipShape && ` • Lips: ${facialFeatures.lipShape}`}
+                  </div>
+                )}
+              </div>
+              
+              {detectedTools && detectedTools.length > 0 && (
+                <Alert className="mt-2 bg-green-50 border-green-200 text-green-800">
+                  <AlertDescription>
+                    Detected: {detectedTools.map(tool => tool.type).join(', ')}
+                  </AlertDescription>
+                </Alert>
+              )}
+            </>
+          )}
           
           <CameraControls
             isStreamActive={cameraActive}
             showSettings={showSettings}
             modelsLoaded={modelsLoaded}
-            startCamera={toggleCamera}
+            startCamera={activateCamera}
             stopCamera={toggleCamera}
             toggleSettings={toggleSettings}
             retryFaceDetection={retryFaceDetection}
@@ -441,6 +415,9 @@ const CameraPage = () => {
             permissionDenied={permissionDenied}
             deviceNotFound={deviceNotFound}
             checkDevices={checkDevices}
+            availableDevices={availableDevices}
+            selectedDeviceId={selectedDeviceId}
+            selectCamera={selectCamera}
           />
           
           {cameraActive && modelsLoaded && (

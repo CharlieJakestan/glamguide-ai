@@ -8,10 +8,41 @@ export const useCamera = () => {
   const [deviceNotFound, setDeviceNotFound] = useState(false);
   const [faceDetected, setFaceDetected] = useState(false);
   const [faceMesh, setFaceMesh] = useState(null);
+  const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const { toast } = useToast();
+
+  // Load available camera devices
+  const loadCameraDevices = useCallback(async () => {
+    try {
+      await navigator.mediaDevices.getUserMedia({ video: true }); // Request permission first
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter(device => device.kind === 'videoinput');
+      
+      setAvailableDevices(videoDevices);
+      setDeviceNotFound(videoDevices.length === 0);
+      
+      // Auto-select the first device if available
+      if (videoDevices.length > 0 && !selectedDeviceId) {
+        setSelectedDeviceId(videoDevices[0].deviceId);
+      }
+      
+      return videoDevices.length > 0;
+    } catch (error) {
+      console.error('Error accessing camera devices:', error);
+      if (error instanceof DOMException) {
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+          setPermissionDenied(true);
+        } else if (error.name === 'NotFoundError') {
+          setDeviceNotFound(true);
+        }
+      }
+      return false;
+    }
+  }, [selectedDeviceId]);
 
   // Check if camera is available when component mounts
   useEffect(() => {
@@ -25,13 +56,17 @@ export const useCamera = () => {
       return;
     }
 
-    // Auto-activate camera on component mount
-    activateCamera();
-
-    // Reset device error states when component mounts
-    setDeviceNotFound(false);
-    setPermissionDenied(false);
-  }, [toast]);
+    // Load available camera devices
+    loadCameraDevices().then(hasDevices => {
+      if (hasDevices) {
+        console.log('Camera devices found, attempting auto-activation');
+        // Auto-activate camera on component mount if devices are found
+        activateCamera();
+      } else {
+        console.warn('No camera devices found during initial check');
+      }
+    });
+  }, [toast, loadCameraDevices]);
 
   // Clean up camera stream when component unmounts
   useEffect(() => {
@@ -49,57 +84,57 @@ export const useCamera = () => {
       videoRef.current.srcObject = null;
     }
     setCameraActive(false);
+    setFaceDetected(false);
   }, []);
 
   const checkDevices = async (): Promise<boolean> => {
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoDevices = devices.filter(device => device.kind === 'videoinput');
-      
-      if (videoDevices.length > 0) {
-        setDeviceNotFound(false);
-        return true;
-      } else {
-        setDeviceNotFound(true);
-        toast({
-          title: "No Camera Found",
-          description: "No video input devices detected. Please connect a camera and try again.",
-          variant: "destructive",
-        });
-        return false;
-      }
-    } catch (error) {
-      console.error('Error checking devices:', error);
-      setDeviceNotFound(true);
-      toast({
-        title: "Camera Check Failed",
-        description: "An error occurred while checking for cameras.",
-        variant: "destructive",
-      });
-      return false;
+    return await loadCameraDevices();
+  };
+
+  const selectCamera = async (deviceId: string) => {
+    setSelectedDeviceId(deviceId);
+    if (cameraActive) {
+      stopCameraStream();
+      await activateCamera(deviceId);
     }
   };
 
-  const activateCamera = async () => {
+  const activateCamera = async (deviceId?: string) => {
     // Reset error states
     setDeviceNotFound(false);
     setPermissionDenied(false);
     
-    // Check if any video devices are available
-    const hasVideoDevices = await checkDevices();
-    
-    if (!hasVideoDevices) {
-      return;
+    // Ensure we have devices or try to refresh the list
+    if (availableDevices.length === 0) {
+      const hasDevices = await loadCameraDevices();
+      if (!hasDevices) {
+        toast({
+          title: "No Camera Found",
+          description: "Please check your camera connection and permissions.",
+          variant: "destructive",
+        });
+        return;
+      }
     }
     
     try {
+      // Use the selected device ID or default to the selected one
+      const targetDeviceId = deviceId || selectedDeviceId;
+      
       // Explicitly request camera access with specific constraints
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { 
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          facingMode: "user" 
-        },
+        video: targetDeviceId ? 
+          { 
+            deviceId: { exact: targetDeviceId },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: "user" 
+          } :
+          { 
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: "user" 
+          },
         audio: false
       });
       
@@ -128,7 +163,7 @@ export const useCamera = () => {
         description: "Position your face in the frame for analysis.",
       });
       
-      console.log('Camera activated successfully');
+      console.log('Camera activated successfully with device ID:', targetDeviceId || 'default');
     } catch (error) {
       console.error('Error accessing camera:', error);
       
@@ -215,6 +250,10 @@ export const useCamera = () => {
     faceDetected,
     setFaceDetected,
     faceMesh,
-    setFaceMesh
+    setFaceMesh,
+    availableDevices,
+    selectedDeviceId,
+    selectCamera,
+    loadCameraDevices
   };
 };

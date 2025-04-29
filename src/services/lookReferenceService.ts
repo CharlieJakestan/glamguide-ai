@@ -1,256 +1,250 @@
-import { supabase } from '@/lib/supabase';
+
+import { trainAIWithReferenceImages as trainWithImages } from '@/services/makeupReferenceService';
 
 export interface ReferenceLook {
   id: string;
   name: string;
   description: string;
   imageUrl: string;
-  category: string;
-  products: {
-    category: string;
-    name: string;
-    shade?: string;
-    technique?: string;
-  }[];
+  difficulty: 'beginner' | 'intermediate' | 'advanced';
+  occasion: string;
+  duration: number; // in minutes
   steps: {
-    order: number;
-    area: string;
+    step: number;
     instruction: string;
-    technique: string;
+    imageUrl?: string;
+    toolsNeeded?: string[];
+    productsNeeded?: string[];
   }[];
+  tags: string[];
 }
 
-// Updated interface for steps with customization property
-export interface CustomizedStep {
-  order: number;
-  area: string;
-  instruction: string;
-  technique: string;
-  customization?: string;
-}
-
-// Casual day soft glam look based on the provided image
-const casualSoftGlamLook: ReferenceLook = {
-  id: 'casual-day-soft-glam',
-  name: 'Soft Glam Elegant Casual',
-  description: 'A soft glam look that balances elegance with a natural touch, perfect for casual outings or semi-formal gatherings.',
-  imageUrl: '/lovable-uploads/b30403d6-fafd-40f8-8dd4-e3d56d388dc0.png',
-  category: 'Casual Day Looks',
-  products: [
-    { category: 'Skin Prep', name: 'Lightweight Moisturizer' },
-    { category: 'Skin Prep', name: 'Blurring Primer' },
-    { category: 'Base', name: 'Satin Foundation' },
-    { category: 'Base', name: 'Lightweight Concealer' },
-    { category: 'Base', name: 'Translucent Setting Powder' },
-    { category: 'Cheeks', name: 'Subtle Contour' },
-    { category: 'Cheeks', name: 'Peach Blush' },
-    { category: 'Cheeks', name: 'Champagne Highlighter' },
-    { category: 'Eyes', name: 'Neutral Eyeshadow Palette' },
-    { category: 'Eyes', name: 'Defined Eyeliner' },
-    { category: 'Eyes', name: 'Lengthening Mascara' },
-    { category: 'Eyes', name: 'Brow Pencil' },
-    { category: 'Lips', name: 'Classic Red Lipstick' },
-    { category: 'Lips', name: 'Matching Lip Liner' },
-    { category: 'Setting', name: 'Hydrating Setting Spray' }
-  ],
-  steps: [
-    { order: 1, area: 'face', instruction: 'Apply lightweight moisturizer all over the face', technique: 'Pat gently into skin using fingertips' },
-    { order: 2, area: 'face', instruction: 'Apply blurring primer focusing on t-zone and areas with texture', technique: 'Press into skin, don\'t rub' },
-    { order: 3, area: 'face', instruction: 'Apply satin foundation for a natural healthy glow', technique: 'Start from center of face and blend outward' },
-    { order: 4, area: 'under-eyes', instruction: 'Apply lightweight concealer under eyes and on any blemishes', technique: 'Pat gently with fingertip or beauty sponge' },
-    { order: 5, area: 'face', instruction: 'Set with translucent powder focusing on t-zone', technique: 'Press lightly with a fluffy brush, don\'t sweep' },
-    { order: 6, area: 'cheeks', instruction: 'Apply subtle contour along cheekbones and jawline', technique: 'Use light pressure and blend thoroughly' },
-    { order: 7, area: 'cheeks', instruction: 'Apply peach or soft pink blush to the apples of cheeks', technique: 'Smile and apply to the roundest part, then blend upward' },
-    { order: 8, area: 'high-points', instruction: 'Apply champagne highlighter to high points of face', technique: 'Light application on cheekbones, bridge of nose, cupid\'s bow' },
-    { order: 9, area: 'eyes', instruction: 'Apply light brown eyeshadow to the crease', technique: 'Use windshield wiper motions to blend' },
-    { order: 10, area: 'eyes', instruction: 'Apply soft shimmer to the lids', technique: 'Pat on with finger or dense brush' },
-    { order: 11, area: 'eyes', instruction: 'Apply defined eyeliner with a soft wing', technique: 'Start thin at inner corner, gradually thicken' },
-    { order: 12, area: 'eyes', instruction: 'Apply lengthening mascara', technique: 'Wiggle wand at base of lashes, then pull through' },
-    { order: 13, area: 'brows', instruction: 'Fill in brows with a natural arch', technique: 'Use light, feathery strokes in direction of hair growth' },
-    { order: 14, area: 'lips', instruction: 'Line lips with matching lip liner', technique: 'Follow natural lip line, slightly overline if desired' },
-    { order: 15, area: 'lips', instruction: 'Apply classic red or berry lipstick', technique: 'Start from center and work outward' },
-    { order: 16, area: 'face', instruction: 'Finish with hydrating setting spray', technique: 'Hold bottle at arm\'s length and apply in X and T motion' }
-  ]
-};
-
-// Array of reference looks (can be expanded later)
-const REFERENCE_LOOKS: ReferenceLook[] = [
-  casualSoftGlamLook
+// Sample reference looks for demonstration
+const referenceLooks: ReferenceLook[] = [
+  {
+    id: 'natural-everyday',
+    name: 'Natural Everyday',
+    description: 'A clean, fresh look that enhances your features for daily wear',
+    imageUrl: '/assets/looks/natural-everyday.jpg',
+    difficulty: 'beginner',
+    occasion: 'daily',
+    duration: 10,
+    steps: [
+      {
+        step: 1,
+        instruction: 'Apply a light coverage foundation or BB cream all over face using fingertips or a beauty sponge',
+        toolsNeeded: ['beauty sponge'],
+        productsNeeded: ['foundation', 'bb cream']
+      },
+      {
+        step: 2,
+        instruction: 'Apply concealer under eyes and on any blemishes, blend well',
+        toolsNeeded: ['concealer brush'],
+        productsNeeded: ['concealer']
+      },
+      {
+        step: 3,
+        instruction: 'Lightly dust setting powder on T-zone to reduce shine',
+        toolsNeeded: ['powder brush'],
+        productsNeeded: ['setting powder']
+      },
+      {
+        step: 4,
+        instruction: 'Apply a neutral eyeshadow across lid and blend upward',
+        toolsNeeded: ['eyeshadow brush'],
+        productsNeeded: ['neutral eyeshadow palette']
+      },
+      {
+        step: 5,
+        instruction: 'Apply mascara to upper lashes',
+        productsNeeded: ['mascara']
+      },
+      {
+        step: 6,
+        instruction: 'Apply a natural pink blush to the apples of cheeks',
+        toolsNeeded: ['blush brush'],
+        productsNeeded: ['blush']
+      },
+      {
+        step: 7,
+        instruction: 'Finish with a tinted lip balm',
+        productsNeeded: ['tinted lip balm']
+      }
+    ],
+    tags: ['natural', 'everyday', 'quick', 'minimal']
+  },
+  {
+    id: 'evening-glam',
+    name: 'Evening Glam',
+    description: 'A sophisticated look with dramatic eyes for special occasions',
+    imageUrl: '/assets/looks/evening-glam.jpg',
+    difficulty: 'advanced',
+    occasion: 'evening',
+    duration: 25,
+    steps: [
+      {
+        step: 1,
+        instruction: 'Apply primer to face and eyelids',
+        productsNeeded: ['face primer', 'eye primer']
+      },
+      {
+        step: 2,
+        instruction: 'Apply full coverage foundation with a foundation brush',
+        toolsNeeded: ['foundation brush'],
+        productsNeeded: ['full coverage foundation']
+      },
+      {
+        step: 3,
+        instruction: 'Conceal under eyes and any imperfections with a high coverage concealer',
+        toolsNeeded: ['concealer brush'],
+        productsNeeded: ['high coverage concealer']
+      },
+      {
+        step: 4,
+        instruction: 'Set face with translucent powder',
+        toolsNeeded: ['powder brush'],
+        productsNeeded: ['translucent powder']
+      },
+      {
+        step: 5,
+        instruction: 'Contour cheekbones, forehead, and jawline',
+        toolsNeeded: ['contour brush'],
+        productsNeeded: ['contour powder or cream']
+      },
+      {
+        step: 6,
+        instruction: 'Apply dark eyeshadow to crease, blend well',
+        toolsNeeded: ['crease brush', 'blending brush'],
+        productsNeeded: ['eyeshadow palette']
+      },
+      {
+        step: 7,
+        instruction: 'Apply shimmery eyeshadow to lid',
+        toolsNeeded: ['flat eyeshadow brush'],
+        productsNeeded: ['shimmer eyeshadow']
+      },
+      {
+        step: 8,
+        instruction: 'Line upper lash line with liquid eyeliner, creating a wing',
+        productsNeeded: ['liquid eyeliner']
+      },
+      {
+        step: 9,
+        instruction: 'Apply false lashes and mascara',
+        toolsNeeded: ['lash applicator'],
+        productsNeeded: ['false lashes', 'lash glue', 'mascara']
+      },
+      {
+        step: 10,
+        instruction: 'Add highlighter to cheekbones, brow bone, and cupid\'s bow',
+        toolsNeeded: ['highlighting brush'],
+        productsNeeded: ['highlighter']
+      },
+      {
+        step: 11,
+        instruction: 'Line lips and apply a bold lipstick',
+        productsNeeded: ['lip liner', 'lipstick']
+      }
+    ],
+    tags: ['dramatic', 'evening', 'glam', 'special occasion']
+  }
 ];
 
-/**
- * Get all available reference looks
- */
 export const getReferenceLooks = (): ReferenceLook[] => {
-  return REFERENCE_LOOKS;
+  return referenceLooks;
 };
 
-/**
- * Get a reference look by ID
- */
-export const getReferenceLookById = (id: string): ReferenceLook | undefined => {
-  return REFERENCE_LOOKS.find(look => look.id === id);
+export const getReferenceLookById = (id: string): ReferenceLook | null => {
+  return referenceLooks.find(look => look.id === id) || null;
 };
 
-/**
- * Get makeup steps for a reference look
- */
-export const getLookSteps = (lookId: string): ReferenceLook['steps'] => {
-  const look = getReferenceLookById(lookId);
-  return look?.steps || [];
-};
+export const trainAIWithReferenceImages = trainWithImages;
 
-/**
- * Get product recommendations for a reference look
- */
-export const getLookProducts = (lookId: string): ReferenceLook['products'] => {
-  const look = getReferenceLookById(lookId);
-  return look?.products || [];
-};
-
-/**
- * Get personalized makeup instructions based on face analysis
- */
+// Get personalized steps based on facial analysis
 export const getPersonalizedInstructions = async (
   lookId: string,
-  faceAnalysis: {
+  facialAnalysis: {
     skinTone?: string;
     faceShape?: string;
     features?: string[];
   }
 ): Promise<{
-  customizedSteps: CustomizedStep[];
+  customizedSteps: (ReferenceLook['steps'][0] & { customization?: string })[];
   recommendations: string[];
 }> => {
-  const lookSteps = getLookSteps(lookId);
-  const lookProducts = getLookProducts(lookId);
+  const look = getReferenceLookById(lookId);
+  if (!look) {
+    return {
+      customizedSteps: [],
+      recommendations: []
+    };
+  }
   
-  // This would ideally call an AI service to customize steps based on face analysis
-  // For now, we'll simulate this with some basic logic
+  // Simulate a delay for API call
+  await new Promise(resolve => setTimeout(resolve, 500));
   
-  const customizedSteps = lookSteps.map(step => {
-    const customizedStep: CustomizedStep = { ...step };
+  const customizedSteps = look.steps.map(step => {
+    let customization = '';
     
-    // Add customizations based on face shape
-    if (faceAnalysis.faceShape) {
-      if (step.area === 'cheeks' && step.instruction.includes('contour')) {
-        if (faceAnalysis.faceShape.toLowerCase() === 'round') {
-          customizedStep.customization = "For round faces, focus contour on sides of forehead and directly below cheekbones";
-        } else if (faceAnalysis.faceShape.toLowerCase() === 'square') {
-          customizedStep.customization = "For square faces, soften angles by contouring the corners of the jaw";
-        } else if (faceAnalysis.faceShape.toLowerCase() === 'heart') {
-          customizedStep.customization = "For heart-shaped faces, contour the chin and temples to balance the face";
-        }
-      }
+    // Add customizations based on facial analysis
+    if (facialAnalysis.faceShape === 'Round' && step.instruction.includes('contour')) {
+      customization = 'For your round face shape, focus on contouring the sides of your face to create more definition.';
+    } else if (facialAnalysis.faceShape === 'Square' && step.instruction.includes('contour')) {
+      customization = 'For your square face shape, soften the jawline by contouring the corners of your jaw.';
+    } else if (facialAnalysis.faceShape === 'Heart' && step.instruction.includes('contour')) {
+      customization = 'For your heart-shaped face, contour the bottom of your chin to balance your face proportions.';
     }
     
-    // Add customizations based on skin tone
-    if (faceAnalysis.skinTone) {
-      if (step.area === 'cheeks') {
-        if (faceAnalysis.skinTone.toLowerCase().includes('deep') || 
-            faceAnalysis.skinTone.toLowerCase().includes('dark')) {
-          customizedStep.customization = "Choose deeper, more vibrant blush shades for rich skin tones";
-        } else if (faceAnalysis.skinTone.toLowerCase().includes('light') || 
-                  faceAnalysis.skinTone.toLowerCase().includes('fair')) {
-          customizedStep.customization = "Opt for softer, more buildable application for fair skin tones";
-        }
-      }
+    if (facialAnalysis.skinTone === 'Fair' && step.instruction.includes('blush')) {
+      customization = 'With your fair skin tone, opt for a lighter pink or peach blush for a natural flush.';
+    } else if (facialAnalysis.skinTone === 'Medium' && step.instruction.includes('blush')) {
+      customization = 'For your medium skin tone, coral and warm pink blushes will complement your complexion.';
+    } else if (facialAnalysis.skinTone === 'Deep' && step.instruction.includes('blush')) {
+      customization = 'For your deeper skin tone, rich berry or deep coral blushes will give a beautiful glow.';
     }
     
-    return customizedStep;
+    return {
+      ...step,
+      customization
+    };
   });
   
-  // Generate personalized recommendations
+  // Generate recommendations based on facial analysis
   const recommendations: string[] = [];
   
-  if (faceAnalysis.features) {
-    if (faceAnalysis.features.some(f => f.toLowerCase().includes('hooded'))) {
-      recommendations.push("For hooded eyes, apply eyeshadow with eyes open to ensure visibility, and focus on a higher crease placement");
+  if (facialAnalysis.faceShape) {
+    switch(facialAnalysis.faceShape) {
+      case 'Round':
+        recommendations.push('Contour sides of face to add definition.');
+        recommendations.push('Try angular blush application to create structure.');
+        break;
+      case 'Square':
+        recommendations.push('Soften jawline with blending contour at corners.');
+        recommendations.push('Round your features with circular blush application.');
+        break;
+      case 'Heart':
+        recommendations.push('Balance your face by contouring the chin area.');
+        recommendations.push('Apply blush in a horizontal rather than circular motion.');
+        break;
+      case 'Oval':
+        recommendations.push('Your versatile face shape works well with most techniques.');
+        break;
     }
-    
-    if (faceAnalysis.features.some(f => f.toLowerCase().includes('thin lips'))) {
-      recommendations.push("For thinner lips, use lip liner slightly outside your natural lip line to create the illusion of fuller lips");
-    }
-    
-    if (faceAnalysis.features.some(f => f.toLowerCase().includes('high cheekbones'))) {
-      recommendations.push("Your high cheekbones are a beautiful feature! Highlight them by applying blush slightly higher on the cheekbones");
-    }
+  }
+  
+  if (facialAnalysis.features?.includes('Hooded eyes')) {
+    recommendations.push('Apply eyeshadow with eyes open to ensure it's visible.');
+    recommendations.push('Focus darker shadows on the outer corner to create lift.');
+  }
+  
+  if (facialAnalysis.features?.includes('Full lips')) {
+    recommendations.push('You can skip lip plumping products and focus on definition.');
+  } else if (facialAnalysis.features?.includes('Thin lips')) {
+    recommendations.push('Slightly overdraw your lip line and use lighter colors in the center for fullness.');
   }
   
   return {
     customizedSteps,
     recommendations
   };
-};
-
-// Function to save user feedback about a look
-export const saveLookFeedback = async (
-  lookId: string,
-  userId: string,
-  feedback: {
-    rating: number;
-    comments?: string;
-    difficultyLevel?: 'easy' | 'medium' | 'hard';
-  }
-): Promise<boolean> => {
-  try {
-    // Store feedback in the user_looks table instead of a non-existent table
-    const { error } = await supabase
-      .from('user_looks')
-      .insert({
-        user_id: userId,
-        look_id: lookId,
-        custom_settings: {
-          feedback: {
-            rating: feedback.rating,
-            comments: feedback.comments,
-            difficulty_level: feedback.difficultyLevel
-          }
-        }
-      });
-    
-    return !error;
-  } catch (e) {
-    console.error('Error saving look feedback:', e);
-    return false;
-  }
-};
-
-/**
- * Train AI with makeup reference images from storage
- */
-export const trainAIWithReferenceImages = async (): Promise<boolean> => {
-  try {
-    // Try to fetch makeup reference images from storage
-    const { data: files, error } = await supabase.storage
-      .from('makeup-references')
-      .list('references', {
-        limit: 100,
-        sortBy: { column: 'name', order: 'asc' }
-      });
-    
-    if (error) {
-      console.error('Error fetching makeup reference images:', error);
-      return false;
-    }
-    
-    if (!files || files.length === 0) {
-      console.warn('No makeup reference images found for training');
-      return false;
-    }
-    
-    console.log(`Training AI with ${files.length} reference images...`);
-    
-    // In a real app, this would send the images to a backend for model training
-    // For now, we'll simulate successful training
-    
-    // Simulate training time
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    console.log('AI makeup reference training complete');
-    return true;
-  } catch (error) {
-    console.error('Error training AI with reference images:', error);
-    return false;
-  }
 };

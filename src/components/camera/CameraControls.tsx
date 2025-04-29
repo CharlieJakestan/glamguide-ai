@@ -1,8 +1,9 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Camera, CameraOff, Sliders, RefreshCw, Loader2, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface CameraControlsProps {
   isStreamActive: boolean;
@@ -17,6 +18,9 @@ interface CameraControlsProps {
   permissionDenied?: boolean;
   deviceNotFound?: boolean;
   checkDevices?: () => Promise<boolean>;
+  availableDevices?: MediaDeviceInfo[];
+  selectedDeviceId?: string | null;
+  selectCamera?: (deviceId: string) => void;
 }
 
 const CameraControls: React.FC<CameraControlsProps> = ({
@@ -31,8 +35,13 @@ const CameraControls: React.FC<CameraControlsProps> = ({
   reloadModels,
   permissionDenied = false,
   deviceNotFound = false,
-  checkDevices
+  checkDevices,
+  availableDevices = [],
+  selectedDeviceId,
+  selectCamera
 }) => {
+  const [showDeviceSelector, setShowDeviceSelector] = useState(false);
+
   const handleStartCamera = async () => {
     if (checkDevices) {
       const hasDevices = await checkDevices();
@@ -41,6 +50,12 @@ const CameraControls: React.FC<CameraControlsProps> = ({
       }
     }
     startCamera();
+  };
+
+  const handleDeviceChange = (deviceId: string) => {
+    if (selectCamera) {
+      selectCamera(deviceId);
+    }
   };
 
   return (
@@ -88,6 +103,16 @@ const CameraControls: React.FC<CameraControlsProps> = ({
                 Retry Detection
               </Button>
             )}
+            
+            {availableDevices && availableDevices.length > 1 && (
+              <Button
+                variant="outline"
+                onClick={() => setShowDeviceSelector(!showDeviceSelector)}
+              >
+                <Settings className="mr-2 h-4 w-4" />
+                {showDeviceSelector ? 'Hide Camera Options' : 'Camera Options'}
+              </Button>
+            )}
           </>
         )}
         
@@ -107,6 +132,26 @@ const CameraControls: React.FC<CameraControlsProps> = ({
           </Button>
         )}
       </div>
+      
+      {showDeviceSelector && availableDevices && availableDevices.length > 0 && (
+        <div className="w-full max-w-md mx-auto mt-2">
+          <Select
+            value={selectedDeviceId || undefined}
+            onValueChange={handleDeviceChange}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select camera" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableDevices.map(device => (
+                <SelectItem key={device.deviceId} value={device.deviceId}>
+                  {device.label || `Camera ${device.deviceId.substring(0, 5)}...`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       
       {permissionDenied && (
         <Alert variant="destructive" className="mt-2">
