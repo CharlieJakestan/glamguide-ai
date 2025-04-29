@@ -233,8 +233,8 @@ export const getPersonalizedInstructions = async (
   }
   
   if (facialAnalysis.features?.includes('Hooded eyes')) {
-    recommendations.push('Apply eyeshadow with eyes open to ensure it's visible.');
-    recommendations.push('Focus darker shadows on the outer corner to create lift.');
+    recommendations.push("Apply eyeshadow with eyes open to ensure it is visible.");
+    recommendations.push("Focus darker shadows on the outer corner to create lift.");
   }
   
   if (facialAnalysis.features?.includes('Full lips')) {
