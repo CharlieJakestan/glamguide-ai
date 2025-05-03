@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '@/components/Layout';
 import { useToast } from '@/hooks/use-toast';
@@ -35,7 +36,8 @@ const GanGeneratorAdvanced = () => {
   const [facePosition, setFacePosition] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const [faceDetected, setFaceDetected] = useState(false);
   const [facialMovement, setFacialMovement] = useState<MovementData>({ x: 0, y: 0, magnitude: 0 });
-  const [detectedMakeupTools, setDetectedMakeupTools] = useState<Array<{ type: string; confidence: number }>>([]);
+  // Renamed to localDetectedMakeupTools to avoid conflict
+  const [localDetectedMakeupTools, setLocalDetectedMakeupTools] = useState<Array<{ type: string; confidence: number }>>([]);
   
   const {
     voiceEnabled, setVoiceEnabled,
