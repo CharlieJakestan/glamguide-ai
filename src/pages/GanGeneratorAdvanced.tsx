@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '@/components/Layout';
 import { useToast } from '@/hooks/use-toast';
@@ -17,6 +16,7 @@ import { useAnalysisSetup } from '@/hooks/useAnalysisSetup';
 import { useMakeupObjectDetection } from '@/hooks/useMakeupObjectDetection';
 import { Loader2 } from 'lucide-react';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { MovementData } from '@/types/facial-analysis';
 
 const GanGeneratorAdvanced = () => {
   const { toast } = useToast();
@@ -34,6 +34,8 @@ const GanGeneratorAdvanced = () => {
   const [faceDetectionReady, setFaceDetectionReady] = useState(false);
   const [facePosition, setFacePosition] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const [faceDetected, setFaceDetected] = useState(false);
+  const [facialMovement, setFacialMovement] = useState<MovementData>({ x: 0, y: 0, magnitude: 0 });
+  const [detectedMakeupTools, setDetectedMakeupTools] = useState<Array<{ type: string; confidence: number }>>([]);
   
   const {
     voiceEnabled, setVoiceEnabled,
@@ -364,7 +366,7 @@ const GanGeneratorAdvanced = () => {
               videoRef={videoRef}
               canvasRef={canvasRef}
               faceDetected={faceDetected}
-              movementData={{ x: 0, y: 0, magnitude: 0 }}
+              movementData={facialMovement}
               lastActivity={null}
               nearbyObjects={[]}
               detectedMakeupTools={detectedMakeupTools}

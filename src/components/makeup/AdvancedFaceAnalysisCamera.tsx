@@ -41,6 +41,12 @@ interface AdvancedFaceAnalysisCameraProps {
   onToggleCamera: () => void;
   videoRef: React.RefObject<HTMLVideoElement>;
   canvasRef: React.RefObject<HTMLCanvasElement>;
+  faceDetected: boolean;  // Adding the missing faceDetected prop
+  movementData: MovementData;  // Adding MovementData type for this prop
+  lastActivity: string | null;  // Adding lastActivity prop
+  nearbyObjects?: DetectedObject[];  // Adding nearbyObjects prop with optional flag
+  detectedMakeupTools?: Array<{ type: string; confidence: number }>; // Adding detectedMakeupTools prop
+  retryFaceDetection?: () => void; // Adding retryFaceDetection prop with optional flag
 }
 
 const AdvancedFaceAnalysisCamera: React.FC<AdvancedFaceAnalysisCameraProps> = ({
