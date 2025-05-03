@@ -26,12 +26,14 @@ const GanGeneratorAdvanced = () => {
   } = useSetupStatus();
   
   const { 
-    cameraActive, toggleCamera, 
-    videoRef, canvasRef, streamRef, captureFrame 
+    cameraActive, toggleCamera, activateCamera,
+    videoRef, canvasRef, streamRef, captureFrame,
+    permissionDenied, deviceNotFound
   } = useCamera();
   
   const [faceDetectionReady, setFaceDetectionReady] = useState(false);
   const [facePosition, setFacePosition] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const [faceDetected, setFaceDetected] = useState(false);
   
   const {
     voiceEnabled, setVoiceEnabled,
@@ -51,7 +53,7 @@ const GanGeneratorAdvanced = () => {
   } = useMakeupObjectDetection({
     videoRef,
     facePosition,
-    enabled: cameraActive
+    enabled: cameraActive && faceDetected
   });
   
   const lookGuidance = useReferenceLookGuidance({
@@ -61,25 +63,38 @@ const GanGeneratorAdvanced = () => {
   
   useEffect(() => {
     const setupFaceDetection = async () => {
-      const success = await initAdvancedFaceDetection();
-      setFaceDetectionReady(success);
-      
-      if (!success) {
+      try {
+        console.log('Setting up face detection...');
+        const success = await initAdvancedFaceDetection();
+        console.log('Face detection setup result:', success);
+        setFaceDetectionReady(success);
+        
+        if (!success) {
+          toast({
+            title: "Advanced Face Detection Setup Failed",
+            description: "Could not load advanced face detection models. Some features may not work properly.",
+            variant: "destructive"
+          });
+        } else {
+          console.log('Advanced face detection models loaded successfully');
+        }
+      } catch (error) {
+        console.error('Error setting up face detection:', error);
+        setFaceDetectionReady(false);
         toast({
-          title: "Advanced Face Detection Setup Failed",
-          description: "Could not load advanced face detection models. Some features may not work properly.",
+          title: "Face Detection Error",
+          description: "Failed to initialize face detection. Please refresh the page and try again.",
           variant: "destructive"
         });
-      } else {
-        console.log('Advanced face detection models loaded successfully');
       }
     };
     
     setupFaceDetection();
-  }, [toast, setFaceDetectionReady]);
+  }, [toast]);
   
   useEffect(() => {
     const looks = getReferenceLooks();
+    console.log('Loaded reference looks:', looks.length);
     setReferenceLooks(looks);
     
     if (looks.length > 0 && !selectedLookId) {
@@ -92,7 +107,15 @@ const GanGeneratorAdvanced = () => {
     const defaultKey = "sk_0dfcb07ba1e4d72443fcb5385899c03e9106d3d27ddaadc2";
     setApiKey(defaultKey);
     setVoiceEnabled(true);
-  }, [setVoiceEnabled]);
+    
+    // Auto-activate camera after a short delay
+    setTimeout(() => {
+      if (!cameraActive) {
+        console.log('Auto-activating camera...');
+        activateCamera();
+      }
+    }, 1000);
+  }, [setVoiceEnabled, cameraActive, activateCamera]);
   
   const [autoAnalysisInterval, setAutoAnalysisInterval] = useState<number | null>(null);
   
@@ -109,12 +132,16 @@ const GanGeneratorAdvanced = () => {
   }, [cameraActive, detectedFacialTraits, isAnalyzing]);
   
   const captureAndAnalyzeFace = useCallback(async () => {
-    if (!videoRef.current || !canvasRef.current) return;
+    if (!videoRef.current || !canvasRef.current) {
+      console.log('Cannot capture and analyze: video or canvas ref not available');
+      return;
+    }
     
     try {
       setIsAnalyzing(true);
       setAnalysisError(null);
       
+      console.log('Capturing frame for analysis...');
       const imageBase64 = captureFrame();
       
       if (!imageBase64) {
@@ -122,11 +149,13 @@ const GanGeneratorAdvanced = () => {
       }
       
       try {
+        console.log('Sending frame to GAN service for analysis...');
         const result = await analyzeFacialImage(imageBase64, selectedLookId);
         
         if (result && result.status === 'ok' && result.result) {
           const analysis = result.result.analysis;
           if (analysis) {
+            console.log('Analysis received:', analysis);
             setDetectedFacialTraits({
               skinTone: analysis.skinTone || 'Not detected',
               faceShape: analysis.faceShape || 'Not detected',
@@ -145,6 +174,8 @@ const GanGeneratorAdvanced = () => {
             if (result.result.imageUrl) {
               setAnalysisImage(result.result.imageUrl);
             }
+            
+            setFaceDetected(true);
           }
           
           toast({
@@ -162,6 +193,9 @@ const GanGeneratorAdvanced = () => {
         setAnalysisImage('/lovable-uploads/b30403d6-fafd-40f8-8dd4-e3d56d388dc0.png');
         setProgressPercentage(5);
         
+        // Set face as detected even with mock data
+        setFaceDetected(true);
+        
         toast({
           title: "Face Analyzed",
           description: "Using simulation mode due to connection issues.",
@@ -175,6 +209,7 @@ const GanGeneratorAdvanced = () => {
       const mockTraits = generateMockFacialAnalysis();
       setDetectedFacialTraits(mockTraits);
       setAnalysisImage('/lovable-uploads/b30403d6-fafd-40f8-8dd4-e3d56d388dc0.png');
+      setFaceDetected(true);
       
       toast({
         title: "Analysis Completed",
@@ -241,6 +276,24 @@ const GanGeneratorAdvanced = () => {
             Experience our new advanced AI makeup assistant with real-time face tracking, AR makeup try-on, 
             and interactive guidance powered by artificial intelligence.
           </p>
+          
+          {permissionDenied && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertTitle>Camera Permission Denied</AlertTitle>
+              <AlertDescription>
+                You've blocked camera access. Please reset permissions in your browser settings and refresh the page.
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          {deviceNotFound && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertTitle>No Camera Found</AlertTitle>
+              <AlertDescription>
+                No camera was detected. Please connect a camera and reload the page.
+              </AlertDescription>
+            </Alert>
+          )}
           
           {!faceDetectionReady && (
             <Alert variant="destructive" className="mb-4">
@@ -310,6 +363,21 @@ const GanGeneratorAdvanced = () => {
               onToggleCamera={toggleCamera}
               videoRef={videoRef}
               canvasRef={canvasRef}
+              faceDetected={faceDetected}
+              movementData={{ x: 0, y: 0, magnitude: 0 }}
+              lastActivity={null}
+              nearbyObjects={[]}
+              detectedMakeupTools={detectedMakeupTools}
+              retryFaceDetection={() => {
+                if (cameraActive) {
+                  toggleCamera();
+                  setTimeout(() => {
+                    activateCamera();
+                  }, 500);
+                } else {
+                  activateCamera();
+                }
+              }}
             />
           )}
           

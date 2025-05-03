@@ -18,7 +18,6 @@ export const useCamera = () => {
   // Load available camera devices
   const loadCameraDevices = useCallback(async () => {
     try {
-      await navigator.mediaDevices.getUserMedia({ video: true }); // Request permission first
       const devices = await navigator.mediaDevices.enumerateDevices();
       const videoDevices = devices.filter(device => device.kind === 'videoinput');
       
@@ -56,16 +55,8 @@ export const useCamera = () => {
       return;
     }
 
-    // Load available camera devices
-    loadCameraDevices().then(hasDevices => {
-      if (hasDevices) {
-        console.log('Camera devices found, attempting auto-activation');
-        // Auto-activate camera on component mount if devices are found
-        activateCamera();
-      } else {
-        console.warn('No camera devices found during initial check');
-      }
-    });
+    // Only load camera devices on component mount, don't auto-activate
+    loadCameraDevices();
   }, [toast, loadCameraDevices]);
 
   // Clean up camera stream when component unmounts
@@ -104,6 +95,26 @@ export const useCamera = () => {
     setDeviceNotFound(false);
     setPermissionDenied(false);
     
+    console.log('Activating camera...');
+    
+    // Request permission first
+    try {
+      await navigator.mediaDevices.getUserMedia({ video: true });
+    } catch (error) {
+      console.error('Error requesting camera permission:', error);
+      if (error instanceof DOMException) {
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+          setPermissionDenied(true);
+          toast({
+            title: "Permission Denied",
+            description: "Camera access was blocked. Please reset permissions in your browser settings and try again.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+    }
+    
     // Ensure we have devices or try to refresh the list
     if (availableDevices.length === 0) {
       const hasDevices = await loadCameraDevices();
@@ -120,6 +131,8 @@ export const useCamera = () => {
     try {
       // Use the selected device ID or default to the selected one
       const targetDeviceId = deviceId || selectedDeviceId;
+      
+      console.log('Requesting camera with device ID:', targetDeviceId || 'default');
       
       // Explicitly request camera access with specific constraints
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -142,17 +155,21 @@ export const useCamera = () => {
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
         
+        console.log('Camera stream acquired, attempting to play video');
+        
         // Ensure the video element starts playing
-        const playPromise = videoRef.current.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(error => {
-            console.error('Error playing video:', error);
-            toast({
-              title: "Video Playback Error",
-              description: "Could not start video playback. Please try again.",
-              variant: "destructive",
-            });
+        try {
+          await videoRef.current.play();
+          console.log('Video playback started successfully');
+        } catch (playError) {
+          console.error('Error playing video:', playError);
+          toast({
+            title: "Video Playback Error",
+            description: "Could not start video playback. Please try again.",
+            variant: "destructive",
           });
+          stopCameraStream();
+          return;
         }
       }
       
