@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Camera, CameraOff, Sliders, RefreshCw, Loader2, Settings } from 'lucide-react';
+import { Camera, CameraOff, Sliders, RefreshCw, Loader2, Settings, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -41,21 +41,48 @@ const CameraControls: React.FC<CameraControlsProps> = ({
   selectCamera
 }) => {
   const [showDeviceSelector, setShowDeviceSelector] = useState(false);
+  const [attemptingRecovery, setAttemptingRecovery] = useState(false);
 
   const handleStartCamera = async () => {
+    setAttemptingRecovery(true);
+    
     if (checkDevices) {
       const hasDevices = await checkDevices();
       if (!hasDevices) {
+        setTimeout(() => {
+          // Double-check devices again after a delay
+          checkDevices().then(foundDevices => {
+            if (foundDevices) {
+              startCamera();
+            }
+            setAttemptingRecovery(false);
+          });
+        }, 1000);
         return;
       }
     }
+    
     startCamera();
+    setAttemptingRecovery(false);
   };
 
   const handleDeviceChange = (deviceId: string) => {
     if (selectCamera) {
       selectCamera(deviceId);
     }
+  };
+
+  const handleRetryDeviceDetection = async () => {
+    setAttemptingRecovery(true);
+    
+    if (checkDevices) {
+      const result = await checkDevices();
+      if (result && availableDevices.length > 0) {
+        startCamera();
+      }
+    }
+    
+    setAttemptingRecovery(false);
   };
 
   return (
@@ -65,14 +92,14 @@ const CameraControls: React.FC<CameraControlsProps> = ({
           <Button
             onClick={handleStartCamera}
             className="bg-purple-600 hover:bg-purple-700"
-            disabled={isLoadingModels || (!modelsLoaded && !reloadModels)}
+            disabled={isLoadingModels || attemptingRecovery || (!modelsLoaded && !reloadModels)}
           >
-            {isLoadingModels ? (
+            {isLoadingModels || attemptingRecovery ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <Camera className="mr-2 h-4 w-4" />
             )}
-            Start Camera
+            {attemptingRecovery ? "Checking Camera..." : "Start Camera"}
           </Button>
         ) : (
           <Button
@@ -131,6 +158,18 @@ const CameraControls: React.FC<CameraControlsProps> = ({
             Reload Models
           </Button>
         )}
+        
+        {deviceNotFound && !isStreamActive && (
+          <Button
+            variant="outline"
+            onClick={handleRetryDeviceDetection}
+            disabled={attemptingRecovery}
+            className="border-orange-500 text-orange-700 hover:bg-orange-50"
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            {attemptingRecovery ? "Searching..." : "Retry Camera Detection"}
+          </Button>
+        )}
       </div>
       
       {showDeviceSelector && availableDevices && availableDevices.length > 0 && (
@@ -155,6 +194,7 @@ const CameraControls: React.FC<CameraControlsProps> = ({
       
       {permissionDenied && (
         <Alert variant="destructive" className="mt-2">
+          <AlertCircle className="h-4 w-4" />
           <AlertTitle>Camera Permission Denied</AlertTitle>
           <AlertDescription>
             <p>You've blocked camera access in your browser settings. To fix this:</p>
@@ -168,16 +208,27 @@ const CameraControls: React.FC<CameraControlsProps> = ({
       )}
       
       {deviceNotFound && (
-        <Alert variant="destructive" className="mt-2 border-yellow-500 text-yellow-800 bg-yellow-50">
-          <AlertTitle>No Camera Detected</AlertTitle>
+        <Alert variant="warning" className="mt-2 border-yellow-500 text-yellow-800 bg-yellow-50">
+          <AlertCircle className="h-4 w-4 text-yellow-800" />
+          <AlertTitle>Camera Not Detected</AlertTitle>
           <AlertDescription>
             <p>Your browser couldn't find a camera device. Please check:</p>
             <ul className="list-disc ml-5 mt-2 space-y-1">
               <li>Is your camera connected properly?</li>
-              <li>Is another application using your camera?</li>
-              <li>Do you need to install camera drivers?</li>
+              <li>Is another application using your camera? (Try closing other apps)</li>
+              <li>Try unplugging and reconnecting your camera</li>
+              <li>If using a laptop with built-in camera, try restarting your device</li>
+              <li>Check if camera drivers are installed correctly</li>
               <li>If using a virtual camera, make sure it's activated</li>
             </ul>
+            <div className="mt-2">
+              <strong>Browser Troubleshooting:</strong>
+              <ul className="list-disc ml-5 mt-1 space-y-1">
+                <li>Check browser settings to ensure camera access is allowed</li>
+                <li>Try using a different browser (Chrome, Firefox, Edge)</li>
+                <li>Clear browser cache and cookies, then reload</li>
+              </ul>
+            </div>
           </AlertDescription>
         </Alert>
       )}

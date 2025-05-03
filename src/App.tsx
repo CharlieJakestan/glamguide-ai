@@ -1,3 +1,4 @@
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,6 +9,7 @@ import Camera from "./pages/Camera";
 import Looks from "./pages/Looks";
 import Auth from "./pages/Auth";
 import GanGenerator from "./pages/GanGenerator";
+import GanGeneratorAdvanced from "./pages/GanGeneratorAdvanced";
 import NotFound from "./pages/NotFound";
 import KnowledgeManagement from './pages/KnowledgeManagement';
 
@@ -26,6 +28,7 @@ const App = () => {
             <Route path="/looks" element={<Looks />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/gan-generator" element={<GanGenerator />} />
+            <Route path="/gan-generator-advanced" element={<GanGeneratorAdvanced />} />
             <Route path="/knowledge" element={<KnowledgeManagement />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
