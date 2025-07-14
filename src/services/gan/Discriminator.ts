@@ -75,6 +75,7 @@ export class Discriminator {
   }
 
   public discriminate(input: tf.Tensor): tf.Tensor {
-    return this.model.predict(input) as tf.Tensor;
+    const prediction = this.model.predict(input as any);
+    return (Array.isArray(prediction) ? prediction[0] : prediction) as unknown as tf.Tensor;
   }
 }

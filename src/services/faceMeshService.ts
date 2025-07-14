@@ -88,7 +88,7 @@ export const drawFaceMesh = (
     if (Array.isArray(prediction.scaledMesh)) {
       keypoints = prediction.scaledMesh as number[][];
     } else {
-      const tensor = prediction.scaledMesh as tf.Tensor2D;
+      const tensor = prediction.scaledMesh as unknown as tf.Tensor2D;
       keypoints = tensor.arraySync() as number[][];
     }
     
