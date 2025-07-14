@@ -208,7 +208,7 @@ const CameraControls: React.FC<CameraControlsProps> = ({
       )}
       
       {deviceNotFound && (
-        <Alert variant="warning" className="mt-2 border-yellow-500 text-yellow-800 bg-yellow-50">
+        <Alert variant="destructive" className="mt-2 border-yellow-500 text-yellow-800 bg-yellow-50">
           <AlertCircle className="h-4 w-4 text-yellow-800" />
           <AlertTitle>Camera Not Detected</AlertTitle>
           <AlertDescription>

@@ -49,7 +49,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               <Link to="/" className="text-2xl font-bold text-purple-800">
-                GlamGuide AI
+                SmyraAI
               </Link>
               <div className="hidden md:flex ml-10 space-x-8">
                 <a href="/#about" className="text-gray-700 hover:text-purple-800">

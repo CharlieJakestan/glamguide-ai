@@ -1,18 +1,52 @@
 
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Camera, Eye, Heart, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Layout from '@/components/Layout';
+import AIWelcomeVoice from '@/components/AIWelcomeVoice';
+import { speakInstruction } from '@/services/speechService';
 
 const Index = () => {
+  const navigate = useNavigate();
+  
+  const handleVoiceCommand = async (command: string, params: Record<string, string>) => {
+    console.log('Voice command received:', command, params);
+    
+    switch (command) {
+      case 'next':
+        await speakInstruction('Moving to the next step.');
+        break;
+      case 'help':
+        await speakInstruction('You can say: try on makeup to use the camera, browse looks to see makeup styles, or AI generator to create custom looks.');
+        break;
+      case 'general_input':
+        const text = params.text?.toLowerCase();
+        if (text?.includes('camera') || text?.includes('try on')) {
+          await speakInstruction('Taking you to the camera for virtual try-on.');
+          navigate('/camera');
+        } else if (text?.includes('looks') || text?.includes('browse')) {
+          await speakInstruction('You need to sign in first to browse makeup looks.');
+          navigate('/auth');
+        } else if (text?.includes('generator') || text?.includes('ai')) {
+          await speakInstruction('You need to sign in first to use the AI makeup generator.');
+          navigate('/auth');
+        } else {
+          await speakInstruction('I can help you with virtual makeup try-on, browsing looks, or using the AI generator. What would you like to do?');
+        }
+        break;
+      default:
+        await speakInstruction('I understand. How can I help you with your makeup journey?');
+    }
+  };
+
   return (
     <Layout>
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col items-center text-center mb-12">
           <h1 className="text-4xl font-extrabold tracking-tight text-gray-900 sm:text-5xl md:text-6xl">
-            <span className="block mb-1">Virtual Makeup</span>
-            <span className="block text-purple-600">Try-On Experience</span>
+            <span className="block mb-1">SmyraAI</span>
+            <span className="block text-purple-600">Your Intelligent Makeup Assistant</span>
           </h1>
           <p className="mt-3 max-w-md mx-auto text-base text-gray-500 sm:text-lg md:mt-5 md:text-xl md:max-w-3xl">
             Try on different makeup looks in real-time and get personalized recommendations.
@@ -113,6 +147,9 @@ const Index = () => {
           </div>
         </div>
       </div>
+      
+      {/* AI Welcome Voice Component */}
+      <AIWelcomeVoice onVoiceCommand={handleVoiceCommand} />
     </Layout>
   );
 };

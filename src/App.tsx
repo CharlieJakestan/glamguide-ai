@@ -12,6 +12,7 @@ import GanGenerator from "./pages/GanGenerator";
 import GanGeneratorAdvanced from "./pages/GanGeneratorAdvanced";
 import NotFound from "./pages/NotFound";
 import KnowledgeManagement from './pages/KnowledgeManagement';
+import ProtectedRoute from "./components/auth/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -25,11 +26,27 @@ const App = () => {
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/camera" element={<Camera />} />
-            <Route path="/looks" element={<Looks />} />
+            <Route path="/looks" element={
+              <ProtectedRoute>
+                <Looks />
+              </ProtectedRoute>
+            } />
             <Route path="/auth" element={<Auth />} />
-            <Route path="/gan-generator" element={<GanGenerator />} />
-            <Route path="/gan-generator-advanced" element={<GanGeneratorAdvanced />} />
-            <Route path="/knowledge" element={<KnowledgeManagement />} />
+            <Route path="/gan-generator" element={
+              <ProtectedRoute>
+                <GanGenerator />
+              </ProtectedRoute>
+            } />
+            <Route path="/gan-generator-advanced" element={
+              <ProtectedRoute>
+                <GanGeneratorAdvanced />
+              </ProtectedRoute>
+            } />
+            <Route path="/knowledge" element={
+              <ProtectedRoute>
+                <KnowledgeManagement />
+              </ProtectedRoute>
+            } />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Router>
