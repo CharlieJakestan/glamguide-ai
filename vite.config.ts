@@ -19,4 +19,14 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      external: [
+        '@tensorflow/tfjs-core/dist/ops/ops_for_converter'
+      ]
+    }
+  },
+  optimizeDeps: {
+    exclude: ['@tensorflow/tfjs']
+  }
 }));
