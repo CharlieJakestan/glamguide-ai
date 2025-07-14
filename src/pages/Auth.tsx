@@ -147,7 +147,7 @@ const Auth = () => {
       <div className="flex justify-center items-center min-h-[80vh] py-12">
         <Card className="w-full max-w-md">
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl text-center text-purple-800">Welcome to GlamGuide AI</CardTitle>
+            <CardTitle className="text-2xl text-center text-purple-800">Welcome to SmyraAI</CardTitle>
             <CardDescription className="text-center">
               Sign in or create an account to get started
             </CardDescription>
