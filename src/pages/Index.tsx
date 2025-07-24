@@ -120,7 +120,16 @@ const Index = () => {
 
         <div className="bg-white shadow-lg rounded-lg overflow-hidden">
           <div className="p-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">How This Works</h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold text-gray-900">How This Works</h2>
+              <Button 
+                variant="outline" 
+                onClick={() => navigate('/how-it-works')}
+                className="text-purple-600 border-purple-600 hover:bg-purple-50"
+              >
+                Learn More
+              </Button>
+            </div>
             <div className="grid md:grid-cols-3 gap-6 text-center">
               <div>
                 <div className="bg-purple-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-4">

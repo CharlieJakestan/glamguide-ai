@@ -8,6 +8,7 @@ import GanGenerator from './pages/GanGenerator';
 import GanGeneratorAdvanced from './pages/GanGeneratorAdvanced';
 import NotFound from './pages/NotFound';
 import ProtectedRoute from './components/auth/ProtectedRoute';
+import HowItWorks from './pages/HowItWorks';
 
 const router = createBrowserRouter([
   {
@@ -29,6 +30,10 @@ const router = createBrowserRouter([
   {
     path: '/profile',
     element: <ProtectedRoute><Profile /></ProtectedRoute>,
+  },
+  {
+    path: '/how-it-works',
+    element: <HowItWorks />,
   },
   {
     path: '*',

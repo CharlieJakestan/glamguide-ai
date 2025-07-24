@@ -16,10 +16,16 @@ import VideoDisplayAR from '@/components/camera/VideoDisplayAR';
 import LookNavigation from '@/components/camera/LookNavigation';
 import AIGuidancePanel from '@/components/camera/AIGuidancePanel';
 import APIKeyDialog from '@/components/camera/APIKeyDialog';
+import ProductInventoryForm from '@/components/camera/ProductInventoryForm';
+import ApplicationGuidance from '@/components/camera/ApplicationGuidance';
 import { useMakeupGuidance } from '@/hooks/useMakeupGuidance';
 import { useCamera } from '@/hooks/useCamera';
 import { useFaceMesh } from '@/hooks/useFaceMesh';
+import { useLocationWeather } from '@/hooks/useLocationWeather';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import professionalMeetingImage from '@/assets/professional-meeting-indian.jpg';
+import casualDayImage from '@/assets/casual-day-indian.jpg';
+import casualNightImage from '@/assets/casual-night-indian.jpg';
 
 const CameraPage = () => {
   const { toast } = useToast();
@@ -48,6 +54,18 @@ const CameraPage = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [isLoadingModels, setIsLoadingModels] = useState(true);
+  const [analysisComplete, setAnalysisComplete] = useState(false);
+  const [showProductForm, setShowProductForm] = useState(false);
+  const [showGuidance, setShowGuidance] = useState(false);
+  const [userProfile, setUserProfile] = useState<{
+    products: any[];
+    skinConditions: string[];
+    allergies: string;
+    skinType: string;
+  } | null>(null);
+  
+  // Location and weather hook
+  const { location, weather, isLoading: weatherLoading } = useLocationWeather();
   const [showARView, setShowARView] = useState(false);
   
   const [showAIGuidance, setShowAIGuidance] = useState(false);
@@ -108,17 +126,76 @@ const CameraPage = () => {
             instructions: parsedInstructions
           } as MakeupLook;
         });
+
+        // Add predefined looks with images
+        const predefinedLooks = [
+          {
+            id: 'professional-meeting',
+            name: 'Professional Meeting',
+            description: 'Perfect for business meetings and corporate events',
+            image: professionalMeetingImage,
+            products: [],
+            instructions: [
+              { step: 1, description: 'Apply primer for a smooth base' },
+              { step: 2, description: 'Use medium coverage foundation' },
+              { step: 3, description: 'Apply neutral eyeshadow' },
+              { step: 4, description: 'Use brown eyeliner for definition' },
+              { step: 5, description: 'Apply mascara for natural lashes' },
+              { step: 6, description: 'Use nude or pink lipstick' }
+            ],
+            created_at: new Date().toISOString()
+          },
+          {
+            id: 'casual-day',
+            name: 'Casual Day Look',
+            description: 'Fresh and natural for everyday wear',
+            image: casualDayImage,
+            products: [],
+            instructions: [
+              { step: 1, description: 'Apply tinted moisturizer' },
+              { step: 2, description: 'Use concealer only where needed' },
+              { step: 3, description: 'Apply cream blush for natural glow' },
+              { step: 4, description: 'Use clear or brown mascara' },
+              { step: 5, description: 'Apply tinted lip balm' }
+            ],
+            created_at: new Date().toISOString()
+          },
+          {
+            id: 'casual-night',
+            name: 'Casual Night Look',
+            description: 'Glamorous yet relaxed for evening outings',
+            image: casualNightImage,
+            products: [],
+            instructions: [
+              { step: 1, description: 'Apply full coverage foundation' },
+              { step: 2, description: 'Create smoky eye with dark eyeshadow' },
+              { step: 3, description: 'Use black eyeliner and winged technique' },
+              { step: 4, description: 'Apply dramatic mascara or false lashes' },
+              { step: 5, description: 'Add highlighter for glow' },
+              { step: 6, description: 'Use bold lip color' }
+            ],
+            created_at: new Date().toISOString()
+          }
+        ];
         
         setProducts(fetchedProducts);
-        setLooks(fetchedLooks);
+        setLooks([...predefinedLooks, ...fetchedLooks]);
         
-        if (fetchedLooks.length > 0) {
-          setCurrentLook(fetchedLooks[0]);
+        const allLooks = [...predefinedLooks, ...fetchedLooks];
+        if (allLooks.length > 0) {
+          // Check if a specific look was selected from the Looks page
+          const selectedLookId = sessionStorage.getItem('selectedLookId');
+          const selectedLook = selectedLookId ? allLooks.find(l => l.id === selectedLookId) : null;
+          
+          setCurrentLook(selectedLook || allLooks[0]);
           const initialSettings: Record<string, number> = {};
-          fetchedLooks[0].products.forEach(product => {
+          (selectedLook || allLooks[0]).products.forEach(product => {
             initialSettings[product.product_id] = product.intensity;
           });
           setIntensitySettings(initialSettings);
+          
+          // Clear the session storage
+          sessionStorage.removeItem('selectedLookId');
         }
         
         setIsLoading(false);
@@ -319,6 +396,17 @@ const CameraPage = () => {
   
   const toggleSettings = () => setShowSettings(!showSettings);
   
+  const handleFacialAnalysisComplete = () => {
+    setAnalysisComplete(true);
+    setShowProductForm(true);
+  };
+
+  const handleProductFormComplete = (data: any) => {
+    setUserProfile(data);
+    setShowProductForm(false);
+    setShowGuidance(true);
+  };
+
   const toggleAIGuidance = () => {
     setShowAIGuidance(prev => !prev);
     
@@ -451,6 +539,39 @@ const CameraPage = () => {
             />
           )}
           
+          {/* Enhanced Analysis Flow */}
+          {faceDetected && !analysisComplete && (
+            <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+              <h3 className="text-lg font-semibold text-green-800 mb-2">Facial Analysis Complete!</h3>
+              <p className="text-green-700 mb-3">We've detected your facial features and analyzed your unique characteristics.</p>
+              <Button 
+                onClick={handleFacialAnalysisComplete}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                Continue to Product Setup
+              </Button>
+            </div>
+          )}
+
+          {showProductForm && (
+            <div className="mt-4">
+              <ProductInventoryForm onComplete={handleProductFormComplete} />
+            </div>
+          )}
+
+          {showGuidance && userProfile && currentLook && (
+            <div className="mt-4">
+              <ApplicationGuidance 
+                selectedLook={currentLook}
+                userProducts={userProfile.products}
+                skinConditions={userProfile.skinConditions}
+                allergies={userProfile.allergies}
+                skinType={userProfile.skinType}
+                locationWeather={{ location, weather }}
+              />
+            </div>
+          )}
+
           {showAIGuidance && cameraActive && (
             <AIGuidancePanel
               guidance={currentGuidance}
@@ -464,7 +585,7 @@ const CameraPage = () => {
             />
           )}
           
-          {currentLook && currentLook.instructions && !showAIGuidance && (
+          {currentLook && currentLook.instructions && !showAIGuidance && !showGuidance && (
             <InstructionsPanel instructions={currentLook.instructions} />
           )}
           

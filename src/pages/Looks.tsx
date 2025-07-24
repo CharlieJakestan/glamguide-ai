@@ -7,6 +7,9 @@ import { supabase } from '@/lib/supabase';
 import { MakeupLook } from '@/types/makeup';
 import { useToast } from '@/hooks/use-toast';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import professionalMeetingImage from '@/assets/professional-meeting-indian.jpg';
+import casualDayImage from '@/assets/casual-day-indian.jpg';
+import casualNightImage from '@/assets/casual-night-indian.jpg';
 
 const Looks = () => {
   const navigate = useNavigate();
@@ -14,29 +17,79 @@ const Looks = () => {
   const [looks, setLooks] = useState<MakeupLook[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Predefined looks with images
+  const predefinedLooks = [
+    {
+      id: 'professional-meeting',
+      name: 'Professional Meeting',
+      description: 'Perfect for business meetings and corporate events',
+      image: professionalMeetingImage,
+      products: [],
+      instructions: [
+        { step: 1, description: 'Apply primer for a smooth base' },
+        { step: 2, description: 'Use medium coverage foundation' },
+        { step: 3, description: 'Apply neutral eyeshadow' },
+        { step: 4, description: 'Use brown eyeliner for definition' },
+        { step: 5, description: 'Apply mascara for natural lashes' },
+        { step: 6, description: 'Use nude or pink lipstick' }
+      ],
+      created_at: new Date().toISOString()
+    },
+    {
+      id: 'casual-day',
+      name: 'Casual Day Look',
+      description: 'Fresh and natural for everyday wear',
+      image: casualDayImage,
+      products: [],
+      instructions: [
+        { step: 1, description: 'Apply tinted moisturizer' },
+        { step: 2, description: 'Use concealer only where needed' },
+        { step: 3, description: 'Apply cream blush for natural glow' },
+        { step: 4, description: 'Use clear or brown mascara' },
+        { step: 5, description: 'Apply tinted lip balm' }
+      ],
+      created_at: new Date().toISOString()
+    },
+    {
+      id: 'casual-night',
+      name: 'Casual Night Look',
+      description: 'Glamorous yet relaxed for evening outings',
+      image: casualNightImage,
+      products: [],
+      instructions: [
+        { step: 1, description: 'Apply full coverage foundation' },
+        { step: 2, description: 'Create smoky eye with dark eyeshadow' },
+        { step: 3, description: 'Use black eyeliner and winged technique' },
+        { step: 4, description: 'Apply dramatic mascara or false lashes' },
+        { step: 5, description: 'Add highlighter for glow' },
+        { step: 6, description: 'Use bold lip color' }
+      ],
+      created_at: new Date().toISOString()
+    }
+  ];
+
   useEffect(() => {
     const fetchLooks = async () => {
       try {
         const { data, error } = await supabase.from('makeup_looks').select('*');
         
-        if (error) throw error;
+        let dbLooks: MakeupLook[] = [];
+        if (!error && data) {
+          // Parse JSONB fields
+          dbLooks = data.map(look => ({
+            ...look,
+            products: typeof look.products === 'string' ? JSON.parse(look.products) : look.products,
+            instructions: typeof look.instructions === 'string' ? JSON.parse(look.instructions) : look.instructions,
+          }));
+        }
         
-        // Parse JSONB fields
-        const parsedLooks = data.map(look => ({
-          ...look,
-          products: typeof look.products === 'string' ? JSON.parse(look.products) : look.products,
-          instructions: typeof look.instructions === 'string' ? JSON.parse(look.instructions) : look.instructions,
-        }));
-        
-        setLooks(parsedLooks);
+        // Combine predefined looks with database looks
+        setLooks([...predefinedLooks, ...dbLooks]);
         setIsLoading(false);
       } catch (error) {
         console.error('Error fetching looks:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to load makeup looks',
-          variant: 'destructive',
-        });
+        // If database fails, just use predefined looks
+        setLooks(predefinedLooks);
         setIsLoading(false);
       }
     };
@@ -81,9 +134,18 @@ const Looks = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {looks.map((look) => (
               <div key={look.id} className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300">
-                <div className="h-48 overflow-hidden bg-purple-100 flex items-center justify-center">
-                  {/* If we had images, we'd show them here */}
-                  <div className="text-4xl text-purple-300 font-bold">{look.name.charAt(0)}</div>
+                <div className="h-48 overflow-hidden">
+                  {(look as any).image ? (
+                    <img 
+                      src={(look as any).image} 
+                      alt={look.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="bg-purple-100 h-full flex items-center justify-center">
+                      <div className="text-4xl text-purple-300 font-bold">{look.name.charAt(0)}</div>
+                    </div>
+                  )}
                 </div>
                 <div className="p-4">
                   <h3 className="text-lg font-semibold mb-2">{look.name}</h3>
