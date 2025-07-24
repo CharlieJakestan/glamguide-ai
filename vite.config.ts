@@ -30,6 +30,7 @@ export default defineConfig(({ mode }) => ({
     }
   },
   optimizeDeps: {
-    exclude: ['@tensorflow/tfjs', '@tensorflow/tfjs-core', '@tensorflow/tfjs-layers']
+    include: ['@tensorflow/tfjs', '@tensorflow/tfjs-core', '@tensorflow/tfjs-layers'],
+    exclude: []
   }
 }));
