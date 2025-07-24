@@ -19,6 +19,9 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  define: {
+    global: 'globalThis',
+  },
   build: {
     rollupOptions: {
       external: [
@@ -27,6 +30,6 @@ export default defineConfig(({ mode }) => ({
     }
   },
   optimizeDeps: {
-    exclude: ['@tensorflow/tfjs']
+    exclude: ['@tensorflow/tfjs', '@tensorflow/tfjs-core', '@tensorflow/tfjs-layers']
   }
 }));
