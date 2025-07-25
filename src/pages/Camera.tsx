@@ -86,46 +86,57 @@ const CameraPage = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [productsResponse, looksResponse] = await Promise.all([
-          supabase.from('makeup_products').select('*'),
-          supabase.from('makeup_looks').select('*')
-        ]);
-        
-        if (productsResponse.error) throw productsResponse.error;
-        if (looksResponse.error) throw looksResponse.error;
-        
-        const fetchedProducts = productsResponse.data as MakeupProduct[];
-        
-        const fetchedLooks = looksResponse.data.map(look => {
-          let parsedProducts: ProductInstruction[] = [];
-          if (typeof look.products === 'string') {
-            parsedProducts = JSON.parse(look.products);
-          } else if (Array.isArray(look.products)) {
-            parsedProducts = look.products.map((p: any) => ({
-              product_id: p.product_id,
-              intensity: p.intensity
-            }));
+        // Try to fetch data but don't fail if it's not available (for unauthenticated users)
+        let fetchedProducts: MakeupProduct[] = [];
+        let fetchedLooks: any[] = [];
+
+        try {
+          const [productsResponse, looksResponse] = await Promise.all([
+            supabase.from('makeup_products').select('*'),
+            supabase.from('makeup_looks').select('*')
+          ]);
+          
+          // Only use the data if there are no errors, otherwise continue with predefined looks
+          if (!productsResponse.error && productsResponse.data) {
+            fetchedProducts = productsResponse.data as MakeupProduct[];
           }
           
-          let parsedInstructions: ApplicationStep[] = [];
-          if (typeof look.instructions === 'string') {
-            parsedInstructions = JSON.parse(look.instructions);
-          } else if (Array.isArray(look.instructions)) {
-            parsedInstructions = look.instructions.map((i: any) => ({
-              step: i.step,
-              description: i.description
-            }));
+          if (!looksResponse.error && looksResponse.data) {
+            fetchedLooks = looksResponse.data.map(look => {
+              let parsedProducts: ProductInstruction[] = [];
+              if (typeof look.products === 'string') {
+                parsedProducts = JSON.parse(look.products);
+              } else if (Array.isArray(look.products)) {
+                parsedProducts = look.products.map((p: any) => ({
+                  product_id: p.product_id,
+                  intensity: p.intensity
+                }));
+              }
+              
+              let parsedInstructions: ApplicationStep[] = [];
+              if (typeof look.instructions === 'string') {
+                parsedInstructions = JSON.parse(look.instructions);
+              } else if (Array.isArray(look.instructions)) {
+                parsedInstructions = look.instructions.map((i: any) => ({
+                  step: i.step,
+                  description: i.description
+                }));
+              }
+              
+              return {
+                id: look.id,
+                name: look.name,
+                description: look.description,
+                created_at: look.created_at,
+                products: parsedProducts,
+                instructions: parsedInstructions
+              } as MakeupLook;
+            });
           }
-          
-          return {
-            id: look.id,
-            name: look.name,
-            description: look.description,
-            created_at: look.created_at,
-            products: parsedProducts,
-            instructions: parsedInstructions
-          } as MakeupLook;
-        });
+        } catch (fetchError) {
+          console.warn('Could not fetch data from Supabase, using predefined looks only:', fetchError);
+          // Continue with predefined looks only
+        }
 
         // Add predefined looks with images
         const predefinedLooks = [
