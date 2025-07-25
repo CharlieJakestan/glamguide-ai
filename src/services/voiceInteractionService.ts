@@ -107,16 +107,30 @@ export const startListening = (onCommand: VoiceCommandHandler) => {
   
   recognition.onerror = (event: any) => {
     console.error('Speech recognition error:', event.error);
+    
+    // Stop trying to restart if permissions are denied or not available
+    if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+      console.warn('Speech recognition permission denied. Stopping voice interaction.');
+      isListening = false;
+      commandHandler = null;
+      return;
+    }
   };
   
   recognition.onend = () => {
     console.info('Speech recognition ended');
     isListening = false;
-    // Auto restart if it was supposed to keep listening
-    if (recognition && commandHandler) {
-      console.info('Restarting voice command listening');
-      recognition.start();
-      isListening = true;
+    // Only auto restart if permissions are available and we're supposed to keep listening
+    if (recognition && commandHandler && isListening !== false) {
+      try {
+        console.info('Restarting voice command listening');
+        recognition.start();
+        isListening = true;
+      } catch (error) {
+        console.warn('Failed to restart speech recognition:', error);
+        isListening = false;
+        commandHandler = null;
+      }
     }
   };
   

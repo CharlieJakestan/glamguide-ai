@@ -16,31 +16,36 @@ const AIWelcomeVoice: React.FC<AIWelcomeVoiceProps> = ({ onVoiceCommand }) => {
   const welcomeMessage = "Welcome to SmyraAI! I'm your intelligent makeup assistant. I can help you try on different makeup looks, analyze your facial features, and guide you through makeup application with voice commands. You can browse makeup looks, use our AI generator, or start trying on makeup with your camera. What would you like to do today?";
 
   useEffect(() => {
-    // Auto-play welcome message when component mounts
-    if (!isWelcomePlayed && isVoiceEnabled) {
-      playWelcomeMessage();
-    }
-  }, [isWelcomePlayed, isVoiceEnabled]);
+    // Don't auto-play on mount to avoid permission issues in external browsers
+    // User needs to explicitly interact first
+  }, []);
 
   const playWelcomeMessage = async () => {
     try {
       await speakInstruction(welcomeMessage);
       setIsWelcomePlayed(true);
       
-      // Start voice interaction after welcome
-      if (onVoiceCommand) {
-        startVoiceInteraction();
-      }
+      // Only start voice interaction if user explicitly wants it
+      // Don't auto-start to avoid permission issues
     } catch (error) {
       console.error('Error playing welcome message:', error);
+      setIsWelcomePlayed(true); // Mark as played even if failed
     }
   };
 
   const startVoiceInteraction = () => {
     if (onVoiceCommand) {
-      const success = autoStartVoiceInteraction(onVoiceCommand, '');
-      if (success) {
-        setIsListening(true);
+      try {
+        const success = autoStartVoiceInteraction(onVoiceCommand, '');
+        if (success) {
+          setIsListening(true);
+        } else {
+          console.warn('Failed to start voice interaction - may need user permission');
+          setIsListening(false);
+        }
+      } catch (error) {
+        console.error('Error starting voice interaction:', error);
+        setIsListening(false);
       }
     }
   };
@@ -102,18 +107,16 @@ const AIWelcomeVoice: React.FC<AIWelcomeVoiceProps> = ({ onVoiceCommand }) => {
         )}
       </div>
 
-      {/* Replay Welcome Button */}
-      {isWelcomePlayed && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={playWelcomeMessage}
-          className="bg-white/90 backdrop-blur-sm border-purple-200"
-          disabled={!isVoiceEnabled}
-        >
-          🔊 Replay Welcome
-        </Button>
-      )}
+      {/* Welcome Button */}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={playWelcomeMessage}
+        className="bg-white/90 backdrop-blur-sm border-purple-200"
+        disabled={!isVoiceEnabled}
+      >
+        {isWelcomePlayed ? '🔊 Replay Welcome' : '🎤 Start AI Assistant'}
+      </Button>
     </div>
   );
 };
