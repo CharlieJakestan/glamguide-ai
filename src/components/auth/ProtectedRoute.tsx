@@ -9,33 +9,63 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   
   useEffect(() => {
+    let mounted = true;
+    
     const checkAuth = async () => {
       try {
-        const { data } = await supabase.auth.getSession();
-        setIsAuthenticated(!!data.session?.user);
+        const { data, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Error checking authentication:', error);
+          if (mounted) {
+            setIsAuthenticated(false);
+            setIsLoading(false);
+          }
+          return;
+        }
+        
+        if (mounted) {
+          setIsAuthenticated(!!data.session?.user);
+          setIsLoading(false);
+        }
       } catch (error) {
         console.error('Error checking authentication:', error);
-        setIsAuthenticated(false);
+        if (mounted) {
+          setIsAuthenticated(false);
+          setIsLoading(false);
+        }
       }
     };
     
-    checkAuth();
-    
+    // Set up auth state listener first
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setIsAuthenticated(!!session?.user);
+      (event, session) => {
+        if (mounted) {
+          setIsAuthenticated(!!session?.user);
+          setIsLoading(false);
+        }
       }
     );
     
-    return () => subscription.unsubscribe();
+    // Then check initial session
+    checkAuth();
+    
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
-  if (isAuthenticated === null) {
+  if (isLoading || isAuthenticated === null) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="h-8 w-8 rounded-full border-2 border-purple-600 border-t-transparent animate-spin"></div>
+        <div className="flex flex-col items-center space-y-4">
+          <div className="h-8 w-8 rounded-full border-2 border-purple-600 border-t-transparent animate-spin"></div>
+          <p className="text-sm text-gray-600">Checking authentication...</p>
+        </div>
       </div>
     );
   }

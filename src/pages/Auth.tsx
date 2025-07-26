@@ -54,27 +54,54 @@ const Auth = () => {
     
     try {
       setLoading(true);
-      const { error } = await supabase.auth.signUp({
+      const redirectUrl = `${window.location.origin}/camera`;
+      
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          emailRedirectTo: redirectUrl
+        }
       });
       
       if (error) throw error;
       
-      toast({
-        title: "Account created",
-        description: "Please log in with your new account",
-        variant: "default",
-      });
-      
-      setEmail('');
-      setPassword('');
-      document.getElementById('sign-in-tab')?.click();
+      // If user is immediately confirmed (auto_confirm_email is true), navigate directly
+      if (data.user && data.session) {
+        toast({
+          title: "Account created successfully",
+          description: "Welcome to SmyraAI!",
+          variant: "default",
+        });
+        navigate('/camera');
+      } else {
+        toast({
+          title: "Account created",
+          description: "You can now sign in with your new account",
+          variant: "default",
+        });
+        setEmail('');
+        setPassword('');
+        document.getElementById('sign-in-tab')?.click();
+      }
       
     } catch (error: any) {
+      console.error('Sign up error:', error);
+      let errorMessage = "An unknown error occurred";
+      
+      if (error.message?.includes("already registered")) {
+        errorMessage = "This email is already registered. Please sign in instead.";
+      } else if (error.message?.includes("Invalid email")) {
+        errorMessage = "Please enter a valid email address";
+      } else if (error.message?.includes("Password")) {
+        errorMessage = "Password must be at least 6 characters long";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "Error creating account",
-        description: error.message || "An unknown error occurred",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -96,23 +123,39 @@ const Auth = () => {
     
     try {
       setLoading(true);
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
       
       if (error) throw error;
       
-      toast({
-        title: "Signed in",
-        description: "Welcome back!",
-        variant: "default",
-      });
+      if (data.user && data.session) {
+        toast({
+          title: "Signed in successfully",
+          description: "Welcome back!",
+          variant: "default",
+        });
+        navigate('/camera');
+      }
       
     } catch (error: any) {
+      console.error('Sign in error:', error);
+      let errorMessage = "An unknown error occurred";
+      
+      if (error.message?.includes("Invalid login credentials")) {
+        errorMessage = "Invalid email or password. Please check your credentials.";
+      } else if (error.message?.includes("Email not confirmed")) {
+        errorMessage = "Please check your email and confirm your account before signing in.";
+      } else if (error.message?.includes("Too many requests")) {
+        errorMessage = "Too many login attempts. Please wait a moment and try again.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "Error signing in",
-        description: error.message || "An unknown error occurred",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -123,19 +166,24 @@ const Auth = () => {
   const handleGoogleSignIn = async () => {
     try {
       setLoading(true);
-      const { error } = await supabase.auth.signInWithOAuth({
+      const redirectUrl = `${window.location.origin}/camera`;
+      
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin + '/camera'
+          redirectTo: redirectUrl
         }
       });
       
       if (error) throw error;
       
+      // OAuth will redirect automatically, so no need to handle success here
+      
     } catch (error: any) {
+      console.error('Google sign in error:', error);
       toast({
         title: "Google Sign In Failed",
-        description: error.message || "An unknown error occurred",
+        description: error.message || "An unknown error occurred with Google authentication",
         variant: "destructive",
       });
       setLoading(false);

@@ -86,6 +86,18 @@ const CameraPage = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        // Check if user is authenticated, if not try anonymous sign in for guest access
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
+          try {
+            // Enable anonymous access for guest users
+            await supabase.auth.signInAnonymously();
+          } catch (anonError) {
+            console.warn('Anonymous sign-in failed, continuing without auth:', anonError);
+          }
+        }
+
         // Try to fetch data but don't fail if it's not available (for unauthenticated users)
         let fetchedProducts: MakeupProduct[] = [];
         let fetchedLooks: any[] = [];
