@@ -30,6 +30,30 @@ import casualNightImage from '@/assets/casual-night-indian.jpg';
 const CameraPage = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
+  
+  // Wrap hooks in try-catch to handle initialization errors
+  let cameraHookResult;
+  try {
+    cameraHookResult = useCamera();
+  } catch (error) {
+    console.error('Camera hook error:', error);
+    cameraHookResult = {
+      cameraActive: false,
+      toggleCamera: () => {},
+      activateCamera: () => {},
+      videoRef: { current: null },
+      canvasRef: { current: null },
+      streamRef: { current: null },
+      permissionDenied: false,
+      deviceNotFound: false,
+      checkDevices: async () => false,
+      availableDevices: [],
+      selectedDeviceId: null,
+      selectCamera: () => {},
+      loadCameraDevices: () => {}
+    };
+  }
+  
   const {
     cameraActive,
     toggleCamera,
@@ -44,7 +68,7 @@ const CameraPage = () => {
     selectedDeviceId,
     selectCamera,
     loadCameraDevices
-  } = useCamera();
+  } = cameraHookResult;
   
   const [isLoading, setIsLoading] = useState(true);
   const [products, setProducts] = useState<MakeupProduct[]>([]);
@@ -64,24 +88,48 @@ const CameraPage = () => {
     skinType: string;
   } | null>(null);
   
-  // Location and weather hook
-  const { location, weather, isLoading: weatherLoading } = useLocationWeather();
-  const [showARView, setShowARView] = useState(false);
+  // Location and weather hook with error handling
+  let locationWeatherResult;
+  try {
+    locationWeatherResult = useLocationWeather();
+  } catch (error) {
+    console.error('Location weather hook error:', error);
+    locationWeatherResult = {
+      location: null,
+      weather: null,
+      isLoading: false
+    };
+  }
+  const { location, weather, isLoading: weatherLoading } = locationWeatherResult;
   
+  const [showARView, setShowARView] = useState(false);
   const [showAIGuidance, setShowAIGuidance] = useState(false);
   const [showAPIKeyDialog, setShowAPIKeyDialog] = useState(false);
   
-  // Use the faceMesh hook to get face detection data
+  // Use the faceMesh hook to get face detection data with error handling
+  let faceMeshResult;
+  try {
+    faceMeshResult = useFaceMesh({
+      videoRef,
+      canvasRef,
+      enabled: cameraActive
+    });
+  } catch (error) {
+    console.error('Face mesh hook error:', error);
+    faceMeshResult = {
+      faceDetected: false,
+      facialFeatures: null,
+      detectedTools: [],
+      isModelLoaded: false
+    };
+  }
+  
   const { 
     faceDetected, 
     facialFeatures, 
     detectedTools, 
     isModelLoaded 
-  } = useFaceMesh({
-    videoRef,
-    canvasRef,
-    enabled: cameraActive
-  });
+  } = faceMeshResult;
   
   useEffect(() => {
     const fetchData = async () => {
@@ -295,6 +343,32 @@ const CameraPage = () => {
     loadCameraDevices();
   }, [toast, loadCameraDevices]);
   
+  // Use makeup guidance hook with error handling
+  let makeupGuidanceResult;
+  try {
+    makeupGuidanceResult = useMakeupGuidance({
+      isActive: cameraActive && showAIGuidance && faceDetected,
+      currentLook,
+      availableProducts: products,
+      canvasRef,
+      videoRef,
+      faceDetected
+    });
+  } catch (error) {
+    console.error('Makeup guidance hook error:', error);
+    makeupGuidanceResult = {
+      currentGuidance: null,
+      isAnalyzing: false,
+      substitutions: [],
+      voiceEnabled: false,
+      toggleVoiceGuidance: () => {},
+      resetAnalysis: null,
+      region: '',
+      setRegion: () => {},
+      setVoiceEnabled: () => {}
+    };
+  }
+  
   const {
     currentGuidance,
     isAnalyzing,
@@ -305,14 +379,7 @@ const CameraPage = () => {
     region,
     setRegion,
     setVoiceEnabled
-  } = useMakeupGuidance({
-    isActive: cameraActive && showAIGuidance && faceDetected,
-    currentLook,
-    availableProducts: products,
-    canvasRef,
-    videoRef,
-    faceDetected
-  });
+  } = makeupGuidanceResult;
   
   useEffect(() => {
     if (resetAnalysis) {
