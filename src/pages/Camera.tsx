@@ -132,73 +132,9 @@ const CameraPage = () => {
   } = faceMeshResult;
   
   useEffect(() => {
-    const fetchData = async () => {
+    const initializeData = async () => {
       try {
-        // Check if user is authenticated, if not try anonymous sign in for guest access
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (!session) {
-          try {
-            // Enable anonymous access for guest users
-            await supabase.auth.signInAnonymously();
-          } catch (anonError) {
-            console.warn('Anonymous sign-in failed, continuing without auth:', anonError);
-          }
-        }
-
-        // Try to fetch data but don't fail if it's not available (for unauthenticated users)
-        let fetchedProducts: MakeupProduct[] = [];
-        let fetchedLooks: any[] = [];
-
-        try {
-          const [productsResponse, looksResponse] = await Promise.all([
-            supabase.from('makeup_products').select('*'),
-            supabase.from('makeup_looks').select('*')
-          ]);
-          
-          // Only use the data if there are no errors, otherwise continue with predefined looks
-          if (!productsResponse.error && productsResponse.data) {
-            fetchedProducts = productsResponse.data as MakeupProduct[];
-          }
-          
-          if (!looksResponse.error && looksResponse.data) {
-            fetchedLooks = looksResponse.data.map(look => {
-              let parsedProducts: ProductInstruction[] = [];
-              if (typeof look.products === 'string') {
-                parsedProducts = JSON.parse(look.products);
-              } else if (Array.isArray(look.products)) {
-                parsedProducts = look.products.map((p: any) => ({
-                  product_id: p.product_id,
-                  intensity: p.intensity
-                }));
-              }
-              
-              let parsedInstructions: ApplicationStep[] = [];
-              if (typeof look.instructions === 'string') {
-                parsedInstructions = JSON.parse(look.instructions);
-              } else if (Array.isArray(look.instructions)) {
-                parsedInstructions = look.instructions.map((i: any) => ({
-                  step: i.step,
-                  description: i.description
-                }));
-              }
-              
-              return {
-                id: look.id,
-                name: look.name,
-                description: look.description,
-                created_at: look.created_at,
-                products: parsedProducts,
-                instructions: parsedInstructions
-              } as MakeupLook;
-            });
-          }
-        } catch (fetchError) {
-          console.warn('Could not fetch data from Supabase, using predefined looks only:', fetchError);
-          // Continue with predefined looks only
-        }
-
-        // Add predefined looks with images
+        // Add predefined looks with images that always work
         const predefinedLooks = [
           {
             id: 'professional-meeting',
@@ -248,41 +184,106 @@ const CameraPage = () => {
             created_at: new Date().toISOString()
           }
         ];
-        
-        setProducts(fetchedProducts);
-        setLooks([...predefinedLooks, ...fetchedLooks]);
-        
-        const allLooks = [...predefinedLooks, ...fetchedLooks];
-        if (allLooks.length > 0) {
-          // Check if a specific look was selected from the Looks page
-          const selectedLookId = sessionStorage.getItem('selectedLookId');
-          const selectedLook = selectedLookId ? allLooks.find(l => l.id === selectedLookId) : null;
-          
-          setCurrentLook(selectedLook || allLooks[0]);
-          const initialSettings: Record<string, number> = {};
-          (selectedLook || allLooks[0]).products.forEach(product => {
-            initialSettings[product.product_id] = product.intensity;
-          });
-          setIntensitySettings(initialSettings);
-          
-          // Clear the session storage
-          sessionStorage.removeItem('selectedLookId');
-        }
-        
+
+        // Set basic data immediately so app works
+        setProducts([]);
+        setLooks(predefinedLooks);
+        setCurrentLook(predefinedLooks[0]);
+        setIntensitySettings({});
         setIsLoading(false);
+
+        // Try to fetch additional data in background without blocking the app
+        setTimeout(async () => {
+          try {
+            const [productsResponse, looksResponse] = await Promise.allSettled([
+              supabase.from('makeup_products').select('*'),
+              supabase.from('makeup_looks').select('*')
+            ]);
+
+            let fetchedProducts: MakeupProduct[] = [];
+            let fetchedLooks: any[] = [];
+
+            if (productsResponse.status === 'fulfilled' && 
+                productsResponse.value.data && 
+                !productsResponse.value.error) {
+              fetchedProducts = productsResponse.value.data as MakeupProduct[];
+              setProducts(fetchedProducts);
+            }
+
+            if (looksResponse.status === 'fulfilled' && 
+                looksResponse.value.data && 
+                !looksResponse.value.error) {
+              fetchedLooks = looksResponse.value.data.map((look: any) => {
+                let parsedProducts: ProductInstruction[] = [];
+                if (typeof look.products === 'string') {
+                  try {
+                    parsedProducts = JSON.parse(look.products);
+                  } catch (e) {
+                    parsedProducts = [];
+                  }
+                } else if (Array.isArray(look.products)) {
+                  parsedProducts = look.products.map((p: any) => ({
+                    product_id: p.product_id,
+                    intensity: p.intensity
+                  }));
+                }
+
+                let parsedInstructions: ApplicationStep[] = [];
+                if (typeof look.instructions === 'string') {
+                  try {
+                    parsedInstructions = JSON.parse(look.instructions);
+                  } catch (e) {
+                    parsedInstructions = [];
+                  }
+                } else if (Array.isArray(look.instructions)) {
+                  parsedInstructions = look.instructions.map((i: any) => ({
+                    step: i.step,
+                    description: i.description
+                  }));
+                }
+
+                return {
+                  id: look.id,
+                  name: look.name,
+                  description: look.description,
+                  created_at: look.created_at,
+                  products: parsedProducts,
+                  instructions: parsedInstructions
+                } as MakeupLook;
+              });
+
+              const allLooks = [...predefinedLooks, ...fetchedLooks];
+              setLooks(allLooks);
+
+              // Handle look selection from session storage
+              const selectedLookId = sessionStorage.getItem('selectedLookId');
+              if (selectedLookId) {
+                const selectedLook = allLooks.find(l => l.id === selectedLookId);
+                if (selectedLook) {
+                  setCurrentLook(selectedLook);
+                  const initialSettings: Record<string, number> = {};
+                  selectedLook.products.forEach(product => {
+                    initialSettings[product.product_id] = product.intensity;
+                  });
+                  setIntensitySettings(initialSettings);
+                }
+                sessionStorage.removeItem('selectedLookId');
+              }
+            }
+          } catch (backgroundError) {
+            console.warn('Background data fetch failed, app continues to work:', backgroundError);
+          }
+        }, 100);
+
       } catch (error) {
-        console.error('Error fetching makeup data:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to fetch makeup data',
-          variant: 'destructive',
-        });
+        console.error('Critical initialization error:', error);
+        // Even if this fails, ensure basic app functionality
         setIsLoading(false);
       }
     };
-    
-    fetchData();
-  }, [toast]);
+
+    initializeData();
+  }, []);
   
   useEffect(() => {
     const loadModels = async () => {
