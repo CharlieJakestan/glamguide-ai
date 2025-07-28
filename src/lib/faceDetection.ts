@@ -7,9 +7,9 @@ let loadingPromise: Promise<boolean> | null = null;
 let attemptCount = 0;
 const MAX_ATTEMPTS = 3;
 
-// Model paths
-const MODEL_URL = '/models/face-api';
-const FALLBACK_MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model';
+// Model paths - use CDN directly since local models aren't available
+const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model';
+const FALLBACK_MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model';
 
 export const isModelsLoaded = () => modelsLoaded;
 
@@ -21,39 +21,42 @@ export const initFaceDetection = async (): Promise<boolean> => {
     try {
       console.log('Initializing face detection models...');
       
-      // Try to load from primary location
+      // Try to load from primary CDN
       try {
-        await faceapi.nets.tinyFaceDetector.load(MODEL_URL);
-        await faceapi.nets.faceLandmark68Net.load(MODEL_URL);
-        await faceapi.nets.faceRecognitionNet.load(MODEL_URL);
-        await faceapi.nets.faceExpressionNet.load(MODEL_URL);
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.load(MODEL_URL),
+          faceapi.nets.faceLandmark68Net.load(MODEL_URL),
+          faceapi.nets.faceRecognitionNet.load(MODEL_URL),
+          faceapi.nets.faceExpressionNet.load(MODEL_URL)
+        ]);
         
-        console.log('Face detection models loaded successfully from primary source.');
+        console.log('Face detection models loaded successfully from primary CDN.');
         modelsLoaded = true;
         resolve(true);
         return;
       } catch (primaryError) {
-        console.warn('Failed to load models from primary source, trying fallback...', primaryError);
+        console.warn('Failed to load models from primary CDN, trying fallback...', primaryError);
         
-        // Try fallback CDN
+        // Try fallback CDN with different version
         try {
-          await faceapi.nets.tinyFaceDetector.load(FALLBACK_MODEL_URL);
-          await faceapi.nets.faceLandmark68Net.load(FALLBACK_MODEL_URL);
-          await faceapi.nets.faceRecognitionNet.load(FALLBACK_MODEL_URL);
-          await faceapi.nets.faceExpressionNet.load(FALLBACK_MODEL_URL);
+          await Promise.all([
+            faceapi.nets.tinyFaceDetector.load(FALLBACK_MODEL_URL),
+            faceapi.nets.faceLandmark68Net.load(FALLBACK_MODEL_URL),
+            faceapi.nets.faceRecognitionNet.load(FALLBACK_MODEL_URL),
+            faceapi.nets.faceExpressionNet.load(FALLBACK_MODEL_URL)
+          ]);
           
           console.log('Face detection models loaded successfully from fallback CDN.');
           modelsLoaded = true;
           resolve(true);
           return;
         } catch (fallbackError) {
-          console.error('Failed to load models from fallback source:', fallbackError);
+          console.error('Failed to load models from fallback CDN:', fallbackError);
+          // Continue without models - don't block the app
+          console.warn('Continuing without face detection models');
+          resolve(false);
         }
       }
-      
-      // If we reach here, both attempts failed
-      console.error('Face detection model loading failed after multiple attempts');
-      resolve(false);
     } catch (error) {
       console.error('Error initializing face detection:', error);
       resolve(false);

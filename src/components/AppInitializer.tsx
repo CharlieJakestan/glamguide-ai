@@ -14,30 +14,29 @@ const AppInitializer: React.FC<AppInitializerProps> = ({ children }) => {
     
     const initializeApp = async () => {
       try {
-        // Test Supabase connection with a simple query
-        await supabase.from('makeup_products').select('count', { count: 'exact' }).limit(0);
+        // Just do a minimal check - don't block the app
+        console.log('App initializing...');
         
         if (mounted) {
           setIsInitialized(true);
           setInitError(null);
         }
       } catch (error) {
-        console.warn('Supabase connection issue, continuing with offline mode:', error);
+        console.warn('Initialization issue, continuing anyway:', error);
         
         if (mounted) {
-          // Continue anyway - app should work without Supabase for basic features
+          // Always continue - app should work regardless
           setIsInitialized(true);
           setInitError(null);
         }
       }
     };
 
-    // Add a small delay to prevent flash
-    const timer = setTimeout(initializeApp, 100);
+    // Initialize immediately - no delays
+    initializeApp();
     
     return () => {
       mounted = false;
-      clearTimeout(timer);
     };
   }, []);
 
