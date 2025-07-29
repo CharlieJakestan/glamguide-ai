@@ -4,7 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import AppInitializer from "@/components/AppInitializer";
+// Removed AppInitializer to prevent loading conflicts
 
 // Lazy load components for better performance
 const Index = lazy(() => import("./pages/Index"));
@@ -30,26 +30,31 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    // Handle specific errors that shouldn't trigger error boundary
+    // Only catch truly critical rendering errors
+    console.error('Error caught by boundary:', error);
+    
+    // Don't show error boundary for common issues
     if (error.message.includes('supabase') || 
         error.message.includes('auth') ||
         error.message.includes('network') ||
-        error.message.includes('fetch')) {
-      console.warn('Non-critical error caught:', error);
+        error.message.includes('fetch') ||
+        error.message.includes('camera') ||
+        error.message.includes('ChunkLoadError') ||
+        error.name === 'ChunkLoadError') {
+      console.warn('Non-critical error, continuing app:', error);
       return { hasError: false };
     }
     
-    console.error('Critical error caught by error boundary:', error);
     return { hasError: true };
   }
 
   componentDidCatch(error: Error, errorInfo: any) {
     console.error('App Error:', error, errorInfo);
     
-    // Auto-recover from certain types of errors
+    // Auto-recover quickly from any error
     setTimeout(() => {
       this.setState({ hasError: false });
-    }, 3000);
+    }, 1000);
   }
 
   render() {
@@ -57,24 +62,16 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
       return (
         <div className="min-h-screen flex items-center justify-center bg-background">
           <div className="text-center p-8">
-            <h1 className="text-2xl font-bold text-destructive mb-4">Loading Issue</h1>
+            <h1 className="text-2xl font-bold text-destructive mb-4">Something went wrong</h1>
             <p className="text-muted-foreground mb-4">
-              The app is initializing. This will auto-recover in a moment.
+              An unexpected error occurred. Please try again.
             </p>
-            <div className="flex justify-center space-x-4">
-              <button
-                onClick={() => this.setState({ hasError: false })}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90"
-              >
-                Try Again
-              </button>
-              <button
-                onClick={() => window.location.reload()}
-                className="px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/90"
-              >
-                Refresh Page
-              </button>
-            </div>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90"
+            >
+              Refresh Page
+            </button>
           </div>
         </div>
       );
@@ -102,53 +99,51 @@ const queryClient = new QueryClient({
 const App = () => {
   return (
     <AppErrorBoundary>
-      <AppInitializer>
-        <QueryClientProvider client={queryClient}>
-          <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            <Router>
-              <Suspense fallback={<LoadingSpinner />}>
-                <Routes>
-                  <Route path="/" element={<Index />} />
-                  <Route path="/camera" element={<Camera />} />
-                  <Route path="/how-it-works" element={<HowItWorks />} />
-                  <Route path="/looks" element={
-                    <Suspense fallback={<LoadingSpinner />}>
-                      <ProtectedRoute>
-                        <Looks />
-                      </ProtectedRoute>
-                    </Suspense>
-                  } />
-                  <Route path="/auth" element={<Auth />} />
-                  <Route path="/gan-generator" element={
-                    <Suspense fallback={<LoadingSpinner />}>
-                      <ProtectedRoute>
-                        <GanGenerator />
-                      </ProtectedRoute>
-                    </Suspense>
-                  } />
-                  <Route path="/gan-generator-advanced" element={
-                    <Suspense fallback={<LoadingSpinner />}>
-                      <ProtectedRoute>
-                        <GanGeneratorAdvanced />
-                      </ProtectedRoute>
-                    </Suspense>
-                  } />
-                  <Route path="/knowledge" element={
-                    <Suspense fallback={<LoadingSpinner />}>
-                      <ProtectedRoute>
-                        <KnowledgeManagement />
-                      </ProtectedRoute>
-                    </Suspense>
-                  } />
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </Suspense>
-            </Router>
-          </TooltipProvider>
-        </QueryClientProvider>
-      </AppInitializer>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <Router>
+            <Suspense fallback={<LoadingSpinner />}>
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/camera" element={<Camera />} />
+                <Route path="/how-it-works" element={<HowItWorks />} />
+                <Route path="/looks" element={
+                  <Suspense fallback={<LoadingSpinner />}>
+                    <ProtectedRoute>
+                      <Looks />
+                    </ProtectedRoute>
+                  </Suspense>
+                } />
+                <Route path="/auth" element={<Auth />} />
+                <Route path="/gan-generator" element={
+                  <Suspense fallback={<LoadingSpinner />}>
+                    <ProtectedRoute>
+                      <GanGenerator />
+                    </ProtectedRoute>
+                  </Suspense>
+                } />
+                <Route path="/gan-generator-advanced" element={
+                  <Suspense fallback={<LoadingSpinner />}>
+                    <ProtectedRoute>
+                      <GanGeneratorAdvanced />
+                    </ProtectedRoute>
+                  </Suspense>
+                } />
+                <Route path="/knowledge" element={
+                  <Suspense fallback={<LoadingSpinner />}>
+                    <ProtectedRoute>
+                      <KnowledgeManagement />
+                    </ProtectedRoute>
+                  </Suspense>
+                } />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+          </Router>
+        </TooltipProvider>
+      </QueryClientProvider>
     </AppErrorBoundary>
   );
 };

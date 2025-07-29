@@ -293,56 +293,34 @@ const CameraPage = () => {
         setModelsLoaded(loaded);
         
         if (!loaded) {
-          toast({
-            title: 'Warning',
-            description: 'Face detection models could not be loaded. Trying alternate sources...',
-            variant: 'destructive',
-          });
+          console.warn('Face detection models could not be loaded initially, trying backup...');
           
-          // Try once more with a longer timeout
+          // Try once more silently
           setTimeout(async () => {
             const retryLoaded = await initFaceDetection();
             setModelsLoaded(retryLoaded);
             
-            if (!retryLoaded) {
-              toast({
-                title: 'Error',
-                description: 'Face detection models failed to load. Try refreshing the page.',
-                variant: 'destructive',
-              });
+            if (retryLoaded) {
+              console.log('Face detection models loaded successfully on retry');
             } else {
-              toast({
-                title: 'Success',
-                description: 'Face detection models loaded successfully.',
-                variant: 'default',
-              });
+              console.warn('Face detection models failed to load. App will continue without face detection.');
             }
-          }, 2000);
+          }, 1000);
         } else {
-          toast({
-            title: 'Ready',
-            description: 'Face detection models loaded successfully.',
-            variant: 'default',
-          });
+          console.log('Face detection models loaded successfully');
         }
       } catch (error) {
-        console.error('Error in model loading:', error);
-        toast({
-          title: 'Error',
-          description: 'An unexpected error occurred while loading face detection models.',
-          variant: 'destructive',
-        });
+        console.warn('Error loading face detection models:', error);
         setModelsLoaded(false);
       } finally {
         setIsLoadingModels(false);
       }
     };
     
+    // Load models and camera in background without blocking UI
     loadModels();
-    
-    // Attempt to load camera devices first
     loadCameraDevices();
-  }, [toast, loadCameraDevices]);
+  }, [loadCameraDevices]);
   
   // Use makeup guidance hook with error handling
   let makeupGuidanceResult;
