@@ -42,28 +42,16 @@ export const useCamera = () => {
         return true;
       }
     } catch (error) {
-      console.error('Error accessing camera devices:', error);
+      console.warn('Camera device access error (non-critical):', error);
       if (error instanceof DOMException) {
         if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
           setPermissionDenied(true);
-          toast({
-            title: "Camera Access Denied",
-            description: "Please enable camera access in your browser settings and refresh the page.",
-            variant: "destructive",
-          });
+          console.warn('Camera permission denied by user');
         } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
           setDeviceNotFound(true);
-          toast({
-            title: "Camera Not Found",
-            description: "No camera device was detected. Please connect a camera and reload the page.",
-            variant: "destructive",
-          });
+          console.warn('No camera devices found');
         } else {
-          toast({
-            title: "Camera Access Error",
-            description: `Error accessing camera: ${error.message}`,
-            variant: "destructive",
-          });
+          console.warn('Camera access error:', error.message);
         }
       }
       return false;
@@ -74,11 +62,8 @@ export const useCamera = () => {
   useEffect(() => {
     // Check if the browser supports getUserMedia
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      toast({
-        title: "Camera Not Supported",
-        description: "Your browser doesn't support camera access. Try using a modern browser.",
-        variant: "destructive",
-      });
+      console.warn('Camera not supported in this browser');
+      setDeviceNotFound(true);
       return;
     }
 
@@ -89,6 +74,9 @@ export const useCamera = () => {
       } else {
         console.log('No camera devices found on initial load');
       }
+    }).catch(error => {
+      console.warn('Error loading camera devices on mount:', error);
+      setDeviceNotFound(true);
     });
   }, [toast, loadCameraDevices]);
 

@@ -30,21 +30,33 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    // Only catch truly critical rendering errors
+    // Only catch truly critical rendering errors that break the entire app
     console.error('Error caught by boundary:', error);
     
-    // Don't show error boundary for common issues
+    // Don't show error boundary for any recoverable issues
     if (error.message.includes('supabase') || 
         error.message.includes('auth') ||
         error.message.includes('network') ||
         error.message.includes('fetch') ||
         error.message.includes('camera') ||
+        error.message.includes('mediaDevices') ||
+        error.message.includes('getUserMedia') ||
+        error.message.includes('Permission') ||
+        error.message.includes('NotAllowedError') ||
+        error.message.includes('NotFoundError') ||
         error.message.includes('ChunkLoadError') ||
-        error.name === 'ChunkLoadError') {
+        error.message.includes('face') ||
+        error.message.includes('model') ||
+        error.message.includes('detection') ||
+        error.name === 'ChunkLoadError' ||
+        error.name === 'NotAllowedError' ||
+        error.name === 'NotFoundError' ||
+        error.name === 'PermissionDeniedError') {
       console.warn('Non-critical error, continuing app:', error);
       return { hasError: false };
     }
     
+    // Only show error boundary for truly critical React rendering errors
     return { hasError: true };
   }
 
@@ -54,7 +66,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
     // Auto-recover quickly from any error
     setTimeout(() => {
       this.setState({ hasError: false });
-    }, 1000);
+    }, 500);
   }
 
   render() {
