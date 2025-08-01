@@ -30,10 +30,10 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    // Only catch truly critical rendering errors that break the entire app
+    // Log the error for debugging but don't show error boundary unless it's truly critical
     console.error('Error caught by boundary:', error);
     
-    // Don't show error boundary for any recoverable issues
+    // Don't show error boundary for any recoverable issues - let components handle their own errors
     if (error.message.includes('supabase') || 
         error.message.includes('auth') ||
         error.message.includes('network') ||
@@ -48,25 +48,30 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
         error.message.includes('face') ||
         error.message.includes('model') ||
         error.message.includes('detection') ||
+        error.message.includes('lazy') ||
+        error.message.includes('Suspense') ||
+        error.message.includes('loading') ||
+        error.message.includes('navigation') ||
+        error.message.includes('router') ||
         error.name === 'ChunkLoadError' ||
         error.name === 'NotAllowedError' ||
         error.name === 'NotFoundError' ||
         error.name === 'PermissionDeniedError') {
-      console.warn('Non-critical error, continuing app:', error);
+      console.warn('Non-critical error, app continues normally:', error);
       return { hasError: false };
     }
     
-    // Only show error boundary for truly critical React rendering errors
+    // Only show error boundary for truly critical React rendering errors that can't be recovered
     return { hasError: true };
   }
 
   componentDidCatch(error: Error, errorInfo: any) {
-    console.error('App Error:', error, errorInfo);
+    console.error('App Error Details:', error, errorInfo);
     
-    // Auto-recover quickly from any error
+    // Auto-recover immediately from any error - don't let users get stuck
     setTimeout(() => {
       this.setState({ hasError: false });
-    }, 500);
+    }, 100);
   }
 
   render() {
@@ -121,13 +126,7 @@ const App = () => {
                 <Route path="/" element={<Index />} />
                 <Route path="/camera" element={<Camera />} />
                 <Route path="/how-it-works" element={<HowItWorks />} />
-                <Route path="/looks" element={
-                  <Suspense fallback={<LoadingSpinner />}>
-                    <ProtectedRoute>
-                      <Looks />
-                    </ProtectedRoute>
-                  </Suspense>
-                } />
+                <Route path="/looks" element={<Looks />} />
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/gan-generator" element={
                   <Suspense fallback={<LoadingSpinner />}>

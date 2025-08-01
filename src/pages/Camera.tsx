@@ -291,35 +291,25 @@ const CameraPage = () => {
       try {
         const loaded = await initFaceDetection();
         setModelsLoaded(loaded);
-        
-        if (!loaded) {
-          console.warn('Face detection models could not be loaded initially, trying backup...');
-          
-          // Try once more silently
-          setTimeout(async () => {
-            const retryLoaded = await initFaceDetection();
-            setModelsLoaded(retryLoaded);
-            
-            if (retryLoaded) {
-              console.log('Face detection models loaded successfully on retry');
-            } else {
-              console.warn('Face detection models failed to load. App will continue without face detection.');
-            }
-          }, 1000);
-        } else {
-          console.log('Face detection models loaded successfully');
-        }
+        console.log('Face detection models loaded:', loaded);
       } catch (error) {
-        console.warn('Error loading face detection models:', error);
+        console.warn('Error loading face detection models (non-blocking):', error);
         setModelsLoaded(false);
       } finally {
         setIsLoadingModels(false);
       }
     };
     
-    // Load models and camera in background without blocking UI
-    loadModels();
-    loadCameraDevices();
+    // Load models and camera devices in background - never block UI
+    setTimeout(() => {
+      loadModels().catch(error => {
+        console.warn('Background model loading failed:', error);
+      });
+      
+      loadCameraDevices().catch(error => {
+        console.warn('Background camera loading failed:', error);
+      });
+    }, 0);
   }, [loadCameraDevices]);
   
   // Use makeup guidance hook with error handling
