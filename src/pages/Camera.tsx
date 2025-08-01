@@ -300,16 +300,18 @@ const CameraPage = () => {
       }
     };
     
-    // Load models and camera devices in background - never block UI
-    setTimeout(() => {
+    // Load models and camera devices in background - never block UI or throw errors
+    Promise.resolve().then(() => {
       loadModels().catch(error => {
-        console.warn('Background model loading failed:', error);
+        console.warn('Background model loading failed (non-blocking):', error);
+        // Continue without models - app still works
       });
       
       loadCameraDevices().catch(error => {
-        console.warn('Background camera loading failed:', error);
+        console.warn('Background camera loading failed (non-blocking):', error);
+        // Continue without device enumeration - user can still try camera
       });
-    }, 0);
+    });
   }, [loadCameraDevices]);
   
   // Use makeup guidance hook with error handling
