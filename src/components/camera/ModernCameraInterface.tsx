@@ -178,16 +178,17 @@ export const ModernCameraInterface: React.FC<ModernCameraInterfaceProps> = ({
               {facialAnalysis && (
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
-                    <span className="text-muted-foreground">Age:</span> {facialAnalysis.age}
+                    <span className="text-muted-foreground">Skin tone:</span> {facialAnalysis.skinTone}
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Face:</span> {facialAnalysis.faceShape}
+                    <span className="text-muted-foreground">Face shape:</span> {facialAnalysis.faceShape}
                   </div>
-                  {facialAnalysis.expression && (
-                    <div className="col-span-2">
-                      <span className="text-muted-foreground">Expression:</span> {facialAnalysis.expression}
-                    </div>
-                  )}
+                  <div>
+                    <span className="text-muted-foreground">Eye shape:</span> {facialAnalysis.facialFeatures?.eyeShape}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Lip shape:</span> {facialAnalysis.facialFeatures?.lipShape}
+                  </div>
                 </div>
               )}
             </div>

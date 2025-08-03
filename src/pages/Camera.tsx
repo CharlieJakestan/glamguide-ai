@@ -5,8 +5,13 @@ import { ModernCameraInterface } from '@/components/camera/ModernCameraInterface
 import { useModernCamera } from '@/hooks/useModernCamera';
 import { useModernFaceDetection } from '@/hooks/useModernFaceDetection';
 import { useMakeupAnalyzer } from '@/hooks/useMakeupAnalyzer';
+import { ProductSelector } from '@/components/makeup/ProductSelector';
+import { useState } from 'react';
 
 const CameraPage = () => {
+  // Product state
+  const [selectedProducts, setSelectedProducts] = useState<any[]>([]);
+  
   // Modern camera hook
   const camera = useModernCamera();
   
@@ -20,7 +25,8 @@ const CameraPage = () => {
   // Makeup analysis hook
   const makeupAnalyzer = useMakeupAnalyzer({
     captureFrame: camera.captureFrame,
-    facialAnalysis: faceDetection.getFacialAnalysis()
+    facialAnalysis: faceDetection.getFacialAnalysis(),
+    availableProducts: selectedProducts
   });
   
   
@@ -36,35 +42,42 @@ const CameraPage = () => {
           </p>
         </div>
         
-        <ModernCameraInterface
-          // Camera state
-          isActive={camera.isActive}
-          isLoading={camera.isLoading}
-          error={camera.error}
+        <div className="space-y-6">
+          <ProductSelector
+            selectedProducts={selectedProducts}
+            onProductsChange={setSelectedProducts}
+          />
           
-          // Face detection state
-          faceDetected={faceDetection.faceDetected}
-          isDetectionLoading={faceDetection.isLoading}
-          facialAnalysis={faceDetection.getFacialAnalysis()}
-          
-          // Analysis state
-          isAnalyzing={makeupAnalyzer.isAnalyzing}
-          analysisResult={makeupAnalyzer.analysisResult}
-          currentStep={makeupAnalyzer.currentStep}
-          currentRecommendation={makeupAnalyzer.getCurrentRecommendation()}
-          
-          // Actions
-          onStartCamera={camera.startCamera}
-          onStopCamera={camera.stopCamera}
-          onAnalyze={makeupAnalyzer.analyzeMakeup}
-          onNextStep={makeupAnalyzer.nextStep}
-          onPreviousStep={makeupAnalyzer.previousStep}
-          onResetAnalysis={makeupAnalyzer.resetAnalysis}
-          
-          // Refs
-          videoRef={camera.videoRef}
-          canvasRef={camera.canvasRef}
-        />
+          <ModernCameraInterface
+            // Camera state
+            isActive={camera.isActive}
+            isLoading={camera.isLoading}
+            error={camera.error}
+            
+            // Face detection state
+            faceDetected={faceDetection.faceDetected}
+            isDetectionLoading={faceDetection.isLoading}
+            facialAnalysis={faceDetection.getFacialAnalysis()}
+            
+            // Analysis state
+            isAnalyzing={makeupAnalyzer.isAnalyzing}
+            analysisResult={makeupAnalyzer.analysisResult}
+            currentStep={makeupAnalyzer.currentStep}
+            currentRecommendation={makeupAnalyzer.getCurrentRecommendation()}
+            
+            // Actions
+            onStartCamera={camera.startCamera}
+            onStopCamera={camera.stopCamera}
+            onAnalyze={makeupAnalyzer.analyzeMakeup}
+            onNextStep={makeupAnalyzer.nextStep}
+            onPreviousStep={makeupAnalyzer.previousStep}
+            onResetAnalysis={makeupAnalyzer.resetAnalysis}
+            
+            // Refs
+            videoRef={camera.videoRef}
+            canvasRef={camera.canvasRef}
+          />
+        </div>
       </div>
     </Layout>
   );

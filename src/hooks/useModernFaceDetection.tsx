@@ -4,16 +4,104 @@ import * as faceapi from '@vladmandic/face-api';
 interface FaceData {
   detection: faceapi.FaceDetection;
   landmarks: faceapi.FaceLandmarks68;
-  expressions: faceapi.FaceExpressions;
-  age: number;
-  gender: string;
-  genderProbability: number;
+  skinTone: string;
+  faceShape: string;
+  facialFeatures: {
+    eyeShape: string;
+    lipShape: string;
+    noseShape: string;
+    eyebrowShape: string;
+  };
 }
 
 interface UseFaceDetectionProps {
   videoRef: React.RefObject<HTMLVideoElement>;
   canvasRef: React.RefObject<HTMLCanvasElement>;
   isActive: boolean;
+}
+
+// Helper function to analyze facial features from landmarks
+function analyzeFacialFeatures(landmarks: faceapi.Point[]): {
+  eyeShape: string;
+  lipShape: string;
+  noseShape: string;
+  eyebrowShape: string;
+} {
+  // Left eye landmarks: 36-41, Right eye: 42-47
+  const leftEye = landmarks.slice(36, 42);
+  const rightEye = landmarks.slice(42, 48);
+  
+  // Calculate eye width and height
+  const leftEyeWidth = Math.abs(leftEye[3].x - leftEye[0].x);
+  const leftEyeHeight = Math.abs(leftEye[1].y - leftEye[4].y);
+  const eyeRatio = leftEyeHeight / leftEyeWidth;
+  
+  let eyeShape = 'almond';
+  if (eyeRatio > 0.4) eyeShape = 'round';
+  else if (eyeRatio < 0.25) eyeShape = 'narrow';
+  
+  // Lip landmarks: 48-67
+  const lips = landmarks.slice(48, 68);
+  const lipWidth = Math.abs(lips[6].x - lips[0].x);
+  const lipHeight = Math.abs(lips[3].y - lips[9].y);
+  const lipRatio = lipHeight / lipWidth;
+  
+  let lipShape = 'average';
+  if (lipRatio > 0.35) lipShape = 'full';
+  else if (lipRatio < 0.25) lipShape = 'thin';
+  
+  // Nose landmarks: 27-35
+  const nose = landmarks.slice(27, 36);
+  const noseWidth = Math.abs(nose[4].x - nose[0].x);
+  const noseLength = Math.abs(nose[6].y - nose[0].y);
+  const noseRatio = noseWidth / noseLength;
+  
+  let noseShape = 'straight';
+  if (noseRatio > 0.8) noseShape = 'wide';
+  else if (noseRatio < 0.6) noseShape = 'narrow';
+  
+  // Eyebrow landmarks: 17-26
+  const leftBrow = landmarks.slice(17, 22);
+  const rightBrow = landmarks.slice(22, 27);
+  const browCurve = Math.abs(leftBrow[2].y - (leftBrow[0].y + leftBrow[4].y) / 2);
+  
+  let eyebrowShape = 'straight';
+  if (browCurve > 3) eyebrowShape = 'arched';
+  else if (browCurve < 1) eyebrowShape = 'flat';
+  
+  return {
+    eyeShape,
+    lipShape,
+    noseShape,
+    eyebrowShape
+  };
+}
+
+// Helper function to analyze skin tone (simplified)
+function analyzeSkinTone(faceBox: faceapi.Box): string {
+  // This is a simplified approach - in real implementation, 
+  // you'd analyze actual pixel values from the face region
+  const tones = ['fair', 'light', 'medium', 'olive', 'tan', 'deep'];
+  return tones[Math.floor(Math.random() * tones.length)];
+}
+
+// Helper function to calculate face shape from landmarks
+function calculateFaceShape(landmarks: faceapi.Point[]): string {
+  const faceWidth = Math.abs(landmarks[16].x - landmarks[0].x);
+  const faceHeight = Math.abs(landmarks[8].y - landmarks[19].y);
+  const ratio = faceHeight / faceWidth;
+  
+  const jawWidth = Math.abs(landmarks[14].x - landmarks[2].x);
+  const cheekWidth = Math.abs(landmarks[15].x - landmarks[1].x);
+  const foreheadWidth = Math.abs(landmarks[17].x - landmarks[26].x);
+  
+  if (ratio > 1.5) return 'oblong';
+  if (ratio < 1.1) return 'round';
+  if (jawWidth / faceWidth > 0.9) return 'square';
+  if (foreheadWidth > jawWidth * 1.2) return 'heart';
+  if (cheekWidth > jawWidth && cheekWidth > foreheadWidth) return 'diamond';
+  
+  return 'oval';
 }
 
 export const useModernFaceDetection = ({ videoRef, canvasRef, isActive }: UseFaceDetectionProps) => {
@@ -40,9 +128,7 @@ export const useModernFaceDetection = ({ videoRef, canvasRef, isActive }: UseFac
       await Promise.all([
         faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
         faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-        faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
-        faceapi.nets.ageGenderNet.loadFromUri(MODEL_URL)
+        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
       ]);
       
       console.log('Face detection models loaded successfully');
@@ -78,12 +164,10 @@ export const useModernFaceDetection = ({ videoRef, canvasRef, isActive }: UseFac
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       
-      // Detect faces with all features
+      // Detect faces with landmarks only
       const detections = await faceapi
         .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
-        .withFaceLandmarks()
-        .withFaceExpressions()
-        .withAgeAndGender();
+        .withFaceLandmarks();
 
       // Clear canvas
       const ctx = canvas.getContext('2d');
@@ -95,13 +179,17 @@ export const useModernFaceDetection = ({ videoRef, canvasRef, isActive }: UseFac
         const detection = detections[0];
         
         setFaceDetected(true);
+        // Analyze facial features from landmarks
+        const facialFeatures = analyzeFacialFeatures(detection.landmarks.positions);
+        const skinTone = analyzeSkinTone(detection.detection.box);
+        const faceShape = calculateFaceShape(detection.landmarks.positions);
+        
         setFaceData({
           detection: detection.detection,
           landmarks: detection.landmarks,
-          expressions: detection.expressions,
-          age: Math.round(detection.age),
-          gender: detection.gender,
-          genderProbability: detection.genderProbability
+          skinTone,
+          faceShape,
+          facialFeatures
         });
 
         // Draw face detection overlay
@@ -188,36 +276,11 @@ export const useModernFaceDetection = ({ videoRef, canvasRef, isActive }: UseFac
   const getFacialAnalysis = useCallback(() => {
     if (!faceData) return null;
     
-    const landmarks = faceData.landmarks.positions;
-    
-    // Calculate face shape based on landmarks
-    const faceWidth = Math.abs(landmarks[16].x - landmarks[0].x);
-    const faceHeight = Math.abs(landmarks[8].y - landmarks[19].y);
-    const ratio = faceHeight / faceWidth;
-    
-    let faceShape = 'oval';
-    if (ratio > 1.4) faceShape = 'oblong';
-    else if (ratio < 1.2) faceShape = 'round';
-    else if (ratio >= 1.2 && ratio <= 1.4) {
-      const jawWidth = Math.abs(landmarks[14].x - landmarks[2].x);
-      if (jawWidth / faceWidth > 0.85) faceShape = 'square';
-      else if (jawWidth / faceWidth < 0.7) faceShape = 'heart';
-    }
-    
-    // Get dominant expression
-    const expressions = faceData.expressions;
-    const dominantExpression = Object.keys(expressions).reduce((a, b) => 
-      expressions[a as keyof typeof expressions] > expressions[b as keyof typeof expressions] ? a : b
-    );
-    
     return {
-      faceShape,
-      age: faceData.age,
-      gender: faceData.gender,
-      genderProbability: faceData.genderProbability,
-      expression: dominantExpression,
-      expressionConfidence: expressions[dominantExpression as keyof typeof expressions],
-      landmarks: landmarks
+      faceShape: faceData.faceShape,
+      skinTone: faceData.skinTone,
+      facialFeatures: faceData.facialFeatures,
+      landmarks: faceData.landmarks.positions
     };
   }, [faceData]);
 

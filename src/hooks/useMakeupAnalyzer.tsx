@@ -20,12 +20,21 @@ interface AnalysisResult {
   tips: string[];
 }
 
+interface Product {
+  id: string;
+  name: string;
+  category: string;
+  brand: string;
+  shade?: string;
+}
+
 interface UseMakeupAnalyzerProps {
   captureFrame: () => string | null;
   facialAnalysis: any;
+  availableProducts?: Product[];
 }
 
-export const useMakeupAnalyzer = ({ captureFrame, facialAnalysis }: UseMakeupAnalyzerProps) => {
+export const useMakeupAnalyzer = ({ captureFrame, facialAnalysis, availableProducts = [] }: UseMakeupAnalyzerProps) => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
@@ -53,16 +62,16 @@ export const useMakeupAnalyzer = ({ captureFrame, facialAnalysis }: UseMakeupAna
         throw new Error('Could not capture frame for analysis');
       }
 
-      // Generate recommendations based on facial analysis
-      const skinTone = determineSkinTone(facialAnalysis);
-      const recommendations = generateRecommendations(facialAnalysis, selectedLook);
+      // Generate recommendations based on facial analysis and available products
+      const skinTone = facialAnalysis.skinTone;
+      const recommendations = generateRecommendations(facialAnalysis, selectedLook, availableProducts);
       
       const result: AnalysisResult = {
         skinTone,
         skinType: 'combination', // This would come from more advanced analysis
         faceShape: facialAnalysis.faceShape,
-        eyeShape: 'almond', // This would come from landmark analysis
-        lipShape: 'average', // This would come from landmark analysis
+        eyeShape: facialAnalysis.facialFeatures.eyeShape,
+        lipShape: facialAnalysis.facialFeatures.lipShape,
         recommendations,
         tips: generateTips(facialAnalysis, skinTone)
       };
@@ -141,7 +150,7 @@ function determineSkinTone(facialAnalysis: any): string {
 }
 
 // Generate makeup recommendations
-function generateRecommendations(facialAnalysis: any, selectedLook: any): MakeupRecommendation[] {
+function generateRecommendations(facialAnalysis: any, selectedLook: any, availableProducts: Product[] = []): MakeupRecommendation[] {
   const baseRecommendations: MakeupRecommendation[] = [
     {
       step: 1,
