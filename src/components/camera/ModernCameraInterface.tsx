@@ -170,9 +170,14 @@ export const ModernCameraInterface: React.FC<ModernCameraInterfaceProps> = ({
             <div className="mt-4 space-y-2">
               <div className="flex items-center justify-between text-sm">
                 <span>Face Detection:</span>
-                <Badge variant={faceDetected ? "default" : "secondary"}>
-                  {faceDetected ? "Active" : "Searching..."}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant={faceDetected ? "default" : "secondary"}>
+                    {faceDetected ? "Locked" : "Searching..."}
+                  </Badge>
+                  {faceDetected && (
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                  )}
+                </div>
               </div>
               
               {facialAnalysis && (

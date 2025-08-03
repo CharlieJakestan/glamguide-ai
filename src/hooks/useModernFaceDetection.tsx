@@ -110,9 +110,13 @@ export const useModernFaceDetection = ({ videoRef, canvasRef, isActive }: UseFac
   const [faceDetected, setFaceDetected] = useState(false);
   const [faceData, setFaceData] = useState<FaceData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [detectionConfidence, setDetectionConfidence] = useState(0);
   
   const detectionInterval = useRef<NodeJS.Timeout | null>(null);
   const isDetecting = useRef(false);
+  const lastValidFaceData = useRef<FaceData | null>(null);
+  const consecutiveDetections = useRef(0);
+  const consecutiveLosses = useRef(0);
 
   // Initialize face detection models
   const initializeModels = useCallback(async () => {
@@ -164,9 +168,12 @@ export const useModernFaceDetection = ({ videoRef, canvasRef, isActive }: UseFac
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       
-      // Detect faces with landmarks only
+      // Detect faces with improved settings for stability
       const detections = await faceapi
-        .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+        .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({
+          inputSize: 416,  // Higher input size for better accuracy
+          scoreThreshold: 0.5  // Higher threshold for better quality detections
+        }))
         .withFaceLandmarks();
 
       // Clear canvas
@@ -177,54 +184,94 @@ export const useModernFaceDetection = ({ videoRef, canvasRef, isActive }: UseFac
 
       if (detections.length > 0) {
         const detection = detections[0];
+        const confidence = detection.detection.score;
         
-        setFaceDetected(true);
-        // Analyze facial features from landmarks
-        const facialFeatures = analyzeFacialFeatures(detection.landmarks.positions);
-        const skinTone = analyzeSkinTone(detection.detection.box);
-        const faceShape = calculateFaceShape(detection.landmarks.positions);
-        
-        setFaceData({
-          detection: detection.detection,
-          landmarks: detection.landmarks,
-          skinTone,
-          faceShape,
-          facialFeatures
-        });
-
-        // Draw face detection overlay
-        if (ctx) {
-          // Draw face box
-          const box = detection.detection.box;
-          ctx.strokeStyle = '#00ff00';
-          ctx.lineWidth = 3;
-          ctx.strokeRect(box.x, box.y, box.width, box.height);
+        // Only process detections with good confidence
+        if (confidence > 0.6) {
+          consecutiveDetections.current++;
+          consecutiveLosses.current = 0;
           
-          // Draw landmarks
-          ctx.fillStyle = '#ff0000';
-          detection.landmarks.positions.forEach(point => {
-            ctx.beginPath();
-            ctx.arc(point.x, point.y, 2, 0, 2 * Math.PI);
-            ctx.fill();
-          });
+          // Analyze facial features from landmarks
+          const facialFeatures = analyzeFacialFeatures(detection.landmarks.positions);
+          const skinTone = analyzeSkinTone(detection.detection.box);
+          const faceShape = calculateFaceShape(detection.landmarks.positions);
           
-          // Draw confidence text
-          ctx.fillStyle = '#00ff00';
-          ctx.font = '16px Arial';
-          ctx.fillText(
-            `Confidence: ${Math.round(detection.detection.score * 100)}%`,
-            box.x,
-            box.y - 10
-          );
+          const currentFaceData = {
+            detection: detection.detection,
+            landmarks: detection.landmarks,
+            skinTone,
+            faceShape,
+            facialFeatures
+          };
+          
+          // Update face data and store as last valid
+          setFaceData(currentFaceData);
+          lastValidFaceData.current = currentFaceData;
+          setDetectionConfidence(confidence);
+          
+          // Only set face detected after 2 consecutive good detections for stability
+          if (consecutiveDetections.current >= 2) {
+            setFaceDetected(true);
+          }
+          
+          // Draw face detection overlay
+          if (ctx) {
+            // Draw face box with confidence-based color
+            const box = detection.detection.box;
+            ctx.strokeStyle = confidence > 0.8 ? '#00ff00' : '#ffff00';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(box.x, box.y, box.width, box.height);
+            
+            // Draw landmarks
+            ctx.fillStyle = '#ff0000';
+            detection.landmarks.positions.forEach(point => {
+              ctx.beginPath();
+              ctx.arc(point.x, point.y, 2, 0, 2 * Math.PI);
+              ctx.fill();
+            });
+            
+            // Draw confidence text
+            ctx.fillStyle = confidence > 0.8 ? '#00ff00' : '#ffff00';
+            ctx.font = '16px Arial';
+            ctx.fillText(
+              `Confidence: ${Math.round(confidence * 100)}%`,
+              box.x,
+              box.y - 10
+            );
+          }
+        } else {
+          // Low confidence detection - don't update but don't lose immediately
+          consecutiveLosses.current++;
         }
       } else {
-        setFaceDetected(false);
-        setFaceData(null);
+        consecutiveLosses.current++;
+        consecutiveDetections.current = 0;
+      }
+      
+      // Only lose face detection after 10 consecutive losses (1 second) for stability
+      if (consecutiveLosses.current >= 10) {
+        if (faceDetected) {
+          setFaceDetected(false);
+          setFaceData(null);
+          lastValidFaceData.current = null;
+          setDetectionConfidence(0);
+        }
+      } else if (lastValidFaceData.current && !faceDetected && consecutiveDetections.current >= 2) {
+        // Restore face detection if we have recent valid data
+        setFaceDetected(true);
+        setFaceData(lastValidFaceData.current);
       }
     } catch (err) {
       console.error('Face detection error:', err);
-      setFaceDetected(false);
-      setFaceData(null);
+      consecutiveLosses.current++;
+      
+      // Only clear after multiple consecutive errors
+      if (consecutiveLosses.current >= 5) {
+        setFaceDetected(false);
+        setFaceData(null);
+        lastValidFaceData.current = null;
+        setDetectionConfidence(0);
+      }
     } finally {
       isDetecting.current = false;
     }
@@ -236,7 +283,7 @@ export const useModernFaceDetection = ({ videoRef, canvasRef, isActive }: UseFac
       clearInterval(detectionInterval.current);
     }
     
-    detectionInterval.current = setInterval(detectFaces, 100); // 10 FPS
+    detectionInterval.current = setInterval(detectFaces, 150); // Reduced to ~6.7 FPS for stability
   }, [detectFaces]);
 
   // Stop detection loop
